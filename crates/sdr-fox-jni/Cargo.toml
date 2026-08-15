@@ -1,0 +1,38 @@
+[package]
+name = "sdr-fox-jni"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Android JNI bindings for sdr-fox"
+categories.workspace = true
+keywords.workspace = true
+
+[lib]
+name = "sdr_fox_jni"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true
+sdr-fox-transport.workspace = true
+jni.workspace = true
+# `log` feature makes tracing events also emit `log` records, which
+# android_logger forwards to logcat. Without this the Rust layer is silent on
+# Android and a streaming failure gives no diagnostics at all.
+tracing = { workspace = true, features = ["log"] }
+
+# Android-only: bridge Rust logs into logcat.
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = { version = "0.15", default-features = false }
+log = "0.4"
+
+[features]
+default = []
+# Mark an Android build. The nusb fd transport (`nusb_fd`) is compiled in on
+# Android by `target_os` gating, not by this feature; this flag exists so
+# `--features android` and the cfg-gated tests keep their meaning.
+android = []

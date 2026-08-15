@@ -1,0 +1,45 @@
+# Local/private analysis and agent state
+/.graph/
+/rs41-humidity-analysis/
+/review-*.md
+*.private
+
+# Generated radio-test output (fixtures should be synthetic source data)
+/tests/artifacts/
+/crates/sdr-fox-hardware/tests/artifacts/
+*.wav
+
+# Rust build artifacts
+/target
+**/target/
+
+# Shared libraries produced by cdylib crates
+*.so
+*.dylib
+*.dll
+
+# C/C++ test build output
+tests/c/build/
+
+# Python build / venv artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Android / Gradle
+android/**/build/
+android/**/.gradle/
+android/local.properties
+android/**/*.cxx/
+*.apk
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# ZCode session artifacts (per-session, not project content)
+.zcode/

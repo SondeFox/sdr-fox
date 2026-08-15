@@ -1,0 +1,26 @@
+[package]
+name = "sdr-fox-cabi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Stable C ABI for sdr-fox (header generated via cbindgen)"
+categories.workspace = true
+keywords.workspace = true
+
+[lib]
+name = "sdr_fox"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true
+sdr-fox-transport.workspace = true
+crossbeam-channel.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+cbindgen = "0.29"

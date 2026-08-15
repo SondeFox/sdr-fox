@@ -1,0 +1,28 @@
+[package]
+name = "sdr-fox-dsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Demodulators (WBFM/NBFM/AM/SSB), ADS-B, WAV/PNG writers for sdr-fox"
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+num-complex.workspace = true
+rustfft.workspace = true
+sdr-fox-core.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+png = "0.17"
+
+[lib]
+path = "src/lib.rs"
+
+[[bench]]
+name = "dsp"
+harness = false

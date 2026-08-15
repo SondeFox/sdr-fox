@@ -1,0 +1,8 @@
+edition = "2021"
+max_width = 100
+
+# Stable-only rustfmt options. Unstable options (imports_granularity,
+# group_imports, indent_style) require nightly and break `cargo fmt` on stable.
+reorder_imports = true
+reorder_modules = true
+use_field_init_shorthand = true

@@ -1,0 +1,110 @@
+sdr-fox
+Copyright (c) 2026 sdr-fox contributors
+
+This product is licensed under MIT OR Apache-2.0. See LICENSE-MIT and
+LICENSE-APACHE.
+
+--------------------------------------------------------------------------
+Third-party acknowledgements
+--------------------------------------------------------------------------
+
+The current sdr-fox snapshot is maintained as an independent implementation.
+The acknowledgements below record where public hardware knowledge and design
+ideas came from so that provenance is explicit. A separate engineering review
+and its completed code remediations are summarized in PROVENANCE-AUDIT.md.
+
+1. Hardware protocol knowledge (RTL2832U + R820T2/R828D/E4000/FC00xx)
+--------------------------------------------------------------------------
+
+Realtek and Rafael Micro publish no public programming documentation for
+these parts. The register addresses, bit fields, initialisation sequences,
+PLL divider arithmetic, gain-step tables, IF/HP filter bandwidth tables and
+tuner probe order implemented here are facts about the silicon, established
+publicly by the Osmocom rtl-sdr project and the wider community:
+
+    rtl-sdr - https://osmocom.org/projects/rtl-sdr
+    Copyright (C) 2012-2014 Steve Markgraf and contributors
+    Licensed GPL-2.0-or-later
+
+Correct drivers for this hardware must emit common register writes in the
+hardware-mandated order; the current implementation separately expresses the
+surrounding control logic. These acknowledgements do not grant permission to
+import upstream implementation source or Git history into this repository.
+
+2. Streaming design
+--------------------------------------------------------------------------
+
+The multi-transfer ring used by sdr-fox-transport (pre-submit N bulk
+transfers, re-submit on completion, deliver through a bounded queue with an
+explicit drop policy) follows a pattern established by Osmocom rtl-sdr and
+adopted by:
+
+    rs-rtl (desperado) - Copyright (c) 2025 Xavier Olive
+    Licensed MIT
+
+sdr-fox's transport takes the shape of that design, and its default of five
+consecutive transfer errors before declaring a device lost matches rs-rtl's
+default. The implementation is its own.
+
+3. Interoperability
+--------------------------------------------------------------------------
+
+The `sdrfox` CLI provides subcommands whose roles correspond to the
+familiar rtl_sdr / rtl_test / rtl_fm / rtl_power / rtl_adsb / rtl_biast
+tools, and the DSP crate implements the standard demodulation and decoding
+algorithms those tools also implement (FM discrimination, AM envelope
+detection, SSB via a Hilbert transform, Mode S / ADS-B framing with CRC-24).
+These are shared algorithms and command vocabularies, independently
+implemented here. The C ABI in sdr-fox-cabi defines its own `sdrfox_*`
+surface and is not an implementation of the `rtlsdr_*` API.
+
+4. libusb (LGPL-2.1-or-later) — READ THIS BEFORE SHIPPING A DESKTOP BINARY
+--------------------------------------------------------------------------
+
+    libusb - https://libusb.info
+    Copyright (C) 2001-2023 the libusb contributors
+    Licensed LGPL-2.1-or-later
+
+sdr-fox links libusb through the `rusb` and `libusb1-sys` crates **on desktop
+targets only**. On desktop, `libusb1-sys` normally finds a system libusb via
+pkg-config and links it dynamically. When pkg-config cannot satisfy the target
+— which is the usual outcome when cross-compiling — `libusb1-sys` falls back
+to compiling its vendored copy of libusb and linking it **statically**.
+
+That distinction matters. Distributing a desktop binary with libusb statically
+linked carries LGPL-2.1 §6 obligations (you must enable relinking against a
+modified libusb, e.g. by also shipping the object files). Dynamic linking
+against a separately shipped shared library is the uncontroversial route and
+is what an application embedding sdr-fox should do:
+
+  - build libusb as a shared library for each target ABI, ship it alongside,
+    and point `libusb1-sys` at it (cross pkg-config or the LIBUSB_* env vars);
+  - verify with `readelf -d` that the resulting binary lists libusb as NEEDED
+    and does not define `libusb_init` itself;
+  - reproduce this notice, and libusb's licence text, in the distributed
+    application.
+
+sdr-fox itself is MIT OR Apache-2.0; this obligation attaches to libusb, not
+to sdr-fox, and applies to whoever ships the linked desktop binary.
+
+The Android build carries **no libusb obligation at all**. `rusb` and
+`libusb1-sys` are excluded from the Android target by Cargo target tables in
+`crates/sdr-fox-transport/Cargo.toml`, and the Android transport enters the
+pure-Rust `nusb` backend (Apache-2.0 OR MIT) through `nusb::Device::from_fd`
+with the file descriptor the Android framework supplies. The Android `.so`
+therefore embeds zero libusb code. Verify that before shipping an APK:
+
+  SO=target/aarch64-linux-android/release/libsdr_fox_jni.so
+  strings -a $SO | grep -c -i libusb      # must be 0
+  llvm-readelf -d $SO | grep NEEDED       # only liblog/libdl/libm/libc
+
+(An earlier version of this notice claimed "the pure-Rust nusb backend has no
+Android support at all". That was incorrect: nusb supports Android device
+access and transfers through `from_fd`; only bus *enumeration* is unavailable
+there, which an unprivileged Android process cannot do regardless.)
+
+5. Dependencies
+--------------------------------------------------------------------------
+
+Third-party Rust crates are listed in Cargo.toml with their own licences;
+see `cargo license` or Cargo.lock for the resolved set.

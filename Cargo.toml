@@ -1,0 +1,75 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sdr-fox-core",
+    "crates/sdr-fox-simd",
+    "crates/sdr-fox-transport",
+    "crates/sdr-fox-rtlsdr",
+    "crates/sdr-fox-airspy",
+    "crates/sdr-fox-cabi",
+    "crates/sdr-fox-cli",
+    "crates/sdr-fox-python",
+    "crates/sdr-fox-jni",
+    "crates/sdr-fox-tests",
+    "crates/sdr-fox-dsp",
+    "crates/sdr-fox-hardware",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SondeFox/sdr-fox"
+homepage = "https://github.com/SondeFox/sdr-fox"
+description = "Cross-platform, SIMD-accelerated RTL-SDR and Airspy library"
+authors = ["sdr-fox contributors"]
+categories = ["hardware-support", "multimedia::audio", "science"]
+keywords = ["sdr", "rtlsdr", "airspy", "dsp", "usb"]
+
+# Shared dependency versions. Crates reference these with `dep.workspace = true`.
+[workspace.dependencies]
+# Internal crates
+sdr-fox-core = { path = "crates/sdr-fox-core", version = "0.1.0" }
+sdr-fox-simd = { path = "crates/sdr-fox-simd", version = "0.1.0" }
+sdr-fox-transport = { path = "crates/sdr-fox-transport", version = "0.1.0" }
+sdr-fox-rtlsdr = { path = "crates/sdr-fox-rtlsdr", version = "0.1.0" }
+sdr-fox-airspy = { path = "crates/sdr-fox-airspy", version = "0.1.0" }
+sdr-fox-dsp = { path = "crates/sdr-fox-dsp", version = "0.1.0" }
+
+# External — USB
+nusb = "0.2"
+rusb = "0.9"
+
+# External — async / channels / errors / logging
+tokio = { version = "1", features = ["rt", "sync", "macros", "rt-multi-thread"] }
+futures = "0.3"
+crossbeam-channel = "0.5"
+flume = "0.11"
+thiserror = "2"
+tracing = "0.1"
+
+# External — DSP / numerics
+realfft = "3.5"
+rustfft = "6.4"
+num-complex = "0.4"
+
+# External — bindings
+pyo3 = "0.29"
+jni = "0.22"
+
+# External — CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Dev-only
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+# Keep debug symbols in the bench profile so flamegraphs are useful.
+[profile.bench]
+debug = true

@@ -1,0 +1,27 @@
+[package]
+name = "sdr-fox-simd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SIMD-accelerated IQ sample conversion and FFT spectrum for sdr-fox"
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+sdr-fox-core.workspace = true
+num-complex.workspace = true
+rustfft.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "convert"
+harness = false
+
+# Lints: allow unsafe in this crate because SIMD intrinsics require it.
+[lints.rust]
+unsafe_code = "allow"

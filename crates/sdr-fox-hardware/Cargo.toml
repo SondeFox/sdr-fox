@@ -1,0 +1,21 @@
+[package]
+name = "sdr-fox-hardware"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+description = "Live hardware validation tests for sdr-fox (run with --ignored)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-transport.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true
+sdr-fox-simd.workspace = true
+sdr-fox-dsp.workspace = true

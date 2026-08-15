@@ -1,0 +1,39 @@
+[package]
+name = "sdr-fox-transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "USB transport trait with nusb (desktop + Android fd) and rusb (desktop) impls for sdr-fox"
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-simd.workspace = true
+nusb.workspace = true
+crossbeam-channel.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+libc = "0.2"
+
+# Desktop libusb backends. These MUST NOT compile for Android: the Android
+# transport (`nusb_fd`) uses nusb's `from_fd` entry point, and keeping libusb
+# out of the Android build is the boundary documented in
+# docs/LIBUSB-REMOVAL-PLAN.md.
+#
+# Use target tables, NOT a Cargo feature: features are additive and a
+# feature-based attempt at this failed earlier because downstream crates
+# re-enabled the dependency through unification. Target tables are evaluated
+# per-target and cannot be unified back on.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rusb.workspace = true
+# Direct libusb-1.0 FFI for the desktop rusb async transfer ring. Pinned to the
+# same version rusb resolves to (see Cargo.lock) so we share one copy of the
+# native library.
+libusb1-sys = "0.7"
+
+[features]
+default = []

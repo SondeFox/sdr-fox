@@ -1,0 +1,27 @@
+[package]
+name = "sdr-fox-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "rtl_*-style command-line tool for sdr-fox"
+categories.workspace = true
+keywords.workspace = true
+
+[[bin]]
+name = "sdrfox"
+path = "src/main.rs"
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true
+sdr-fox-transport.workspace = true
+sdr-fox-simd.workspace = true
+sdr-fox-dsp.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ctrlc = "3.4"

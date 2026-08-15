@@ -1,0 +1,15 @@
+[package]
+name = "sdr-fox-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core types, traits, and error model for sdr-fox (no I/O)"
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true

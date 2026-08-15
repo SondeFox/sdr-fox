@@ -1,0 +1,13 @@
+# The organization owner is the final reviewer during private incubation.
+* @h3lix1
+
+# Security, provenance, CI, and public interfaces always require owner review.
+/.github/ @h3lix1
+/SECURITY.md @h3lix1
+/PROVENANCE-AUDIT.md @h3lix1
+/NOTICE @h3lix1
+/docs/UPSTREAMS.md @h3lix1
+/bindings/ @h3lix1
+/crates/sdr-fox-cabi/ @h3lix1
+/crates/sdr-fox-jni/ @h3lix1
+/crates/sdr-fox-transport/ @h3lix1

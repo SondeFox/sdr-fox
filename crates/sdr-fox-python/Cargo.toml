@@ -1,0 +1,30 @@
+[package]
+name = "sdr-fox-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Python bindings for sdr-fox (PyO3 / maturin)"
+categories.workspace = true
+keywords.workspace = true
+
+[lib]
+name = "sdr_fox_python"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true
+sdr-fox-transport.workspace = true
+sdr-fox-simd.workspace = true
+pyo3.workspace = true
+
+[build-dependencies]
+pyo3-build-config = "0.29"

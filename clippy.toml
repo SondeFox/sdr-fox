@@ -1,0 +1,82 @@
+# Clippy configuration shared across the workspace.
+# These are identifiers that appear in doc-comments without needing backticks.
+
+doc-valid-idents = [
+    # Standard set (clippy's defaults must be re-listed when overriding):
+    "KiB", "MiB", "GiB", "TiB", "PiB", "EiB",
+    "DirectX",
+    "ECMAScript",
+    "GPLv2", "GPLv3", "GitHub", "GitLab",
+    "IPv4", "IPv6",
+    "ClojureScript", "CoffeeScript", "JavaScript", "PureScript", "TypeScript",
+    "WebAssembly",
+    "NaN", "NaNs",
+    "OAuth", "GraphQL",
+    "OCaml",
+    "OpenDNS", "OpenGL", "OpenSSH", "OpenSSL", "OpenStreetMap", "OpenTelemetry",
+    "OpenAPI",
+    "LLVM", "Windows", "macOS", "FreeBSD", "NetBSD", "OpenBSD",
+    "PyObject", "PostgreSQL", "MySQL", "SQLite",
+    "True", "False",
+    # SDR / hardware-specific terms used throughout sdr-fox:
+    "AGC",      # automatic gain control
+    "ACK",      # I2C acknowledge
+    "ACKed",    # past tense
+    "NACK",     # I2C not-acknowledge
+    "USB",      # universal serial bus
+    "I2C",      # two-wire serial bus
+    "RTL",      # RTL2832U
+    "PLL",      # phase-locked loop
+    "VID",      # USB vendor ID
+    "PID",      # USB product ID
+    "IF",       # intermediate frequency
+    "RF",       # radio frequency
+    "LO",       # local oscillator
+    "HF",       # high frequency
+    "MHz",      # megahertz
+    "kHz",      # kilohertz
+    "Hz",       # hertz
+    "MS",       # megasamples (MS/s)
+    "kB",       # kilobyte
+    "LNA",      # low-noise amplifier
+    "VGA",      # variable gain amplifier
+    "FM",       # frequency modulation
+    "AM",       # amplitude modulation
+    "FFT",      # fast Fourier transform
+    "SIMD",     # single instruction multiple data
+    "AVX2",     # x86 SIMD
+    "SSE4",     # x86 SIMD
+    "NEON",     # ARM SIMD
+    "GPIO",     # general-purpose I/O
+    "DSP",      # digital signal processing
+    "DAGC",     # digital AGC
+    "dBFS",     # dB relative to full scale
+    "JNI",      # Java Native Interface
+    "PyO3",     # Python bindings crate
+    "IOKit",    # macOS USB framework
+    "control-OUT", # USB control direction
+    "control-IN",  # USB control direction
+    "wIndex",   # USB control transfer field
+    "wValue",   # USB control transfer field
+    "bRequest", # USB control transfer field
+    "bLength",  # USB descriptor field
+    "DIR_IN",   # Airspy vendor direction
+    "DIR_OUT",  # Airspy vendor direction
+    "BOARD_ID_READ", # Airspy health-probe command
+    "SET_FREQ", # Airspy frequency command
+    "MSPS",     # megasamples per second
+    "JVM",      # Java Virtual Machine
+    "NDK",      # Android Native Development Kit
+    "APK",      # Android Package
+    "API",      # application programming interface
+    "FFI",      # foreign function interface
+    "SpyVerter", # HF upconverter product name
+    "SondeFox",  # the baseline project name
+    "Airspy",   # SDR product name
+    "Blog",     # RTL-SDR Blog (V4) product context
+    "Welch",    # Welch's PSD method (proper noun)
+    "Hann",     # Hann window (proper noun)
+    "Hamming",  # Hamming window (proper noun)
+    "Blackman", # Blackman window (proper noun)
+    "RS41",     # radiosonde type
+]

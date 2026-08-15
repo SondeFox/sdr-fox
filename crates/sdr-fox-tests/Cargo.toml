@@ -1,0 +1,20 @@
+[package]
+name = "sdr-fox-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+description = "Cross-crate integration tests for sdr-fox (mock-stack + hardware-gated)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+sdr-fox-core.workspace = true
+sdr-fox-simd.workspace = true
+sdr-fox-transport.workspace = true
+sdr-fox-rtlsdr.workspace = true
+sdr-fox-airspy.workspace = true

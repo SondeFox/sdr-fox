@@ -1,0 +1,68 @@
+# Provenance review summary
+
+**Review date:** 2026-08-04  
+**Snapshot posture:** post-remediation, private incubation  
+**Purpose:** engineering provenance record; not legal advice
+
+## Outcome
+
+An engineering review compared the developing sdr-fox implementation with 38
+public SDR implementations, including 13 under copyleft licenses. The review
+found no evidence of a wholesale port or copied source file. It did identify a
+small number of narrow expression-level similarities and one attribution gap.
+
+Those findings were addressed before this clean snapshot was prepared:
+
+- register-block documentation was rewritten in project-specific language;
+- internal tuner-range fields were renamed rather than retaining upstream
+  naming choices;
+- an unused fixed-point arctangent helper was removed;
+- nearest-gain selection was independently expressed with `abs_diff`;
+- comments that overstated or misstated upstream relationships were corrected;
+- MIT attribution and hardware-protocol acknowledgements were added to
+  [`NOTICE`](NOTICE).
+
+All of those code remediations are present in this source snapshot. The full
+comparison corpus, side-by-side findings, working notes, generated evidence,
+and legacy Git history are intentionally not part of this repository.
+
+## Review method
+
+The review combined several mechanical checks with targeted human inspection:
+
+- substantive verbatim-comment comparison;
+- normalized structural-line overlap;
+- token fingerprinting with unrelated Rust projects as controls;
+- direct review of the highest-ranked file pairs; and
+- manual inspection of identifiers, documentation, constants, and algorithms
+  that normalization can obscure.
+
+Mechanical similarity scores alone were not treated as a legal conclusion.
+Hardware register values, bit fields, and mandated protocol sequences were
+considered separately from discretionary source expression.
+
+## Upstream posture
+
+The project acknowledges the Osmocom rtl-sdr community as a source of public
+hardware-interface knowledge and acknowledges permissively licensed projects
+where a design pattern or default informed the implementation. These
+acknowledgements are retained for transparency. See
+[`docs/UPSTREAMS.md`](docs/UPSTREAMS.md) for the operational rules future
+maintainers and coding agents must follow.
+
+No legacy branch, tag, pull-request ref, or commit is an approved upstream for
+this repository. Do not merge, rebase, cherry-pick, or graft history from the
+restricted development archive. Future upstream updates must be reviewed and
+re-expressed as new work against the clean repository.
+
+## Remaining gate
+
+This review supports engineering decisions; it does not determine copyright
+scope or replace counsel. Before making the repository public or distributing
+binaries, the owner must complete the open-source release checklist, review
+third-party notices, and obtain any legal sign-off they consider necessary.
+
+If a future review finds a provenance concern, report it privately according
+to [`SECURITY.md`](SECURITY.md), preserve the evidence outside the repository,
+and remediate it in a new commit without importing the questioned source or
+its history.
