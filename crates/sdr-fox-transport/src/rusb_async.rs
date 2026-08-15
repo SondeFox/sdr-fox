@@ -704,7 +704,7 @@ unsafe impl<H: RawLibusbHandleOwner> Send for QuarantinedRing<H> {}
 impl<H: RawLibusbHandleOwner> QuarantinedRing<H> {
     fn pump_events_once(&self) -> i32 {
         let timeout = event_timeout_for(EVENT_POLL);
-        unsafe { usb::libusb_handle_events_timeout(self.context_raw, &timeout) }
+        unsafe { usb::libusb_handle_events_timeout(self.context_raw, &raw const timeout) }
     }
 
     fn reap(mut self) {
@@ -980,7 +980,7 @@ impl<H: RawLibusbHandleOwner> LibusbAsyncSource<H> {
 
     fn pump_events_for(&self, timeout: Duration) -> i32 {
         let timeout = event_timeout_for(timeout);
-        unsafe { usb::libusb_handle_events_timeout(self.context_raw, &timeout) }
+        unsafe { usb::libusb_handle_events_timeout(self.context_raw, &raw const timeout) }
     }
 
     fn pump_events_once(&self) -> i32 {

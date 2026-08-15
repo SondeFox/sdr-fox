@@ -158,9 +158,9 @@ impl MockTransport {
     ) -> Option<ScriptedReply> {
         let replies = self.replies_for_mut(direction);
         let pos = replies.iter().position(|r| {
-            r.request.map_or(true, |x| x == req.request)
-                && r.value.map_or(true, |x| x == req.value)
-                && r.index.map_or(true, |x| x == req.index)
+            r.request.is_none_or(|x| x == req.request)
+                && r.value.is_none_or(|x| x == req.value)
+                && r.index.is_none_or(|x| x == req.index)
         })?;
         replies.remove(pos)
     }

@@ -56,7 +56,7 @@ and consumer examples and contracts are in
 
 ## Build and test
 
-Rust 1.80 or newer is required.
+Rust 1.86 or newer is required.
 
 ```sh
 cargo fmt --all -- --check

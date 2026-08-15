@@ -1173,8 +1173,8 @@ mod tests {
 
     #[test]
     fn invalid_kind_is_rejected_at_integer_ffi_boundary() {
-        let mut out = 1usize as *mut SdrFoxDevice;
-        let error = unsafe { sdrfox_open_index(0, u32::MAX, &mut out) };
+        let mut out = std::ptr::dangling_mut::<SdrFoxDevice>();
+        let error = unsafe { sdrfox_open_index(0, u32::MAX, &raw mut out) };
         assert!(!error.is_null());
         assert!(out.is_null());
     }
@@ -1272,7 +1272,10 @@ mod tests {
             .send(Some(Ok(block(IqSamples::Cu8(Vec::new())))))
             .unwrap();
         let mut byte = 0_u8;
-        assert_eq!(unsafe { sdrfox_read_stream(handle, &mut byte, 1, 500) }, -1);
+        assert_eq!(
+            unsafe { sdrfox_read_stream(handle, &raw mut byte, 1, 500) },
+            -1
+        );
         unsafe { sdrfox_close_stream(handle) };
     }
 
@@ -1295,7 +1298,7 @@ mod tests {
             2
         );
         let mut stats = SdrFoxStreamStats::default();
-        assert_eq!(unsafe { sdrfox_stream_stats(handle, &mut stats) }, 0);
+        assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
         assert_eq!(
             stats,
             SdrFoxStreamStats {
@@ -1372,13 +1375,16 @@ mod tests {
         let token = handle as usize;
         let first = thread::spawn(move || {
             let mut byte = 0u8;
-            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &mut byte, 1, 0) }
+            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &raw mut byte, 1, 0) }
         });
         thread::sleep(Duration::from_millis(20));
 
         let mut byte = 0u8;
         let started = Instant::now();
-        assert_eq!(unsafe { sdrfox_read_stream(handle, &mut byte, 1, 20) }, 0);
+        assert_eq!(
+            unsafe { sdrfox_read_stream(handle, &raw mut byte, 1, 20) },
+            0
+        );
         assert!(started.elapsed() < Duration::from_millis(250));
 
         unsafe { sdrfox_stop_stream(handle) };
@@ -1393,13 +1399,13 @@ mod tests {
         let token = handle as usize;
         let first = thread::spawn(move || {
             let mut byte = 0_u8;
-            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &mut byte, 1, 0) }
+            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &raw mut byte, 1, 0) }
         });
         thread::sleep(Duration::from_millis(20));
         let token = handle as usize;
         let second = thread::spawn(move || {
             let mut byte = 0_u8;
-            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &mut byte, 1, 0) }
+            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &raw mut byte, 1, 0) }
         });
         thread::sleep(Duration::from_millis(20));
 
@@ -1422,7 +1428,7 @@ mod tests {
         let token = handle as usize;
         let reader = thread::spawn(move || {
             let mut byte = 0u8;
-            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &mut byte, 1, 0) }
+            unsafe { sdrfox_read_stream(token as *mut SdrFoxStream, &raw mut byte, 1, 0) }
         });
         thread::sleep(Duration::from_millis(20));
         unsafe { sdrfox_stop_stream(handle) };

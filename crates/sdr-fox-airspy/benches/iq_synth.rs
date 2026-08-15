@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use sdr_fox_airspy::iq_synth::IqSynthesizer;
+use std::hint::black_box;
 
 fn bench_iq_synth(criterion: &mut Criterion) {
     const CONTAINERS: usize = 65_536;
