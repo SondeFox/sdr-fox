@@ -243,7 +243,7 @@ fn choose_filter(row: &[u8], previous: &[u8]) -> RowFilter {
             0,
             left,
             up,
-            ((u16::from(left) + u16::from(up)) / 2) as u8,
+            u16::midpoint(u16::from(left), u16::from(up)) as u8,
             paeth_predictor(left, up, up_left),
         ];
         for (score, predictor) in scores.iter_mut().zip(predictors) {
@@ -271,7 +271,7 @@ fn apply_filter(filter: RowFilter, row: &[u8], previous: &[u8], output: &mut [u8
             RowFilter::None => 0,
             RowFilter::Sub => left,
             RowFilter::Up => up,
-            RowFilter::Average => ((u16::from(left) + u16::from(up)) / 2) as u8,
+            RowFilter::Average => u16::midpoint(u16::from(left), u16::from(up)) as u8,
             RowFilter::Paeth => paeth_predictor(left, up, up_left),
         };
         output[i] = row[i].wrapping_sub(predictor);
@@ -439,7 +439,12 @@ mod tests {
     fn decode(path: &Path) -> (::png::OutputInfo, Vec<u8>) {
         let decoder = ::png::Decoder::new(BufReader::new(File::open(path).unwrap()));
         let mut reader = decoder.read_info().unwrap();
-        let mut bytes = vec![0; reader.output_buffer_size()];
+        let mut bytes = vec![
+            0;
+            reader
+                .output_buffer_size()
+                .expect("decoded PNG output fits in memory")
+        ];
         let info = reader.next_frame(&mut bytes).unwrap();
         bytes.truncate(info.buffer_size());
         (info, bytes)

@@ -498,7 +498,7 @@ impl IqSynthesizer {
         elements_per_complex: usize,
         emit_block: impl Fn(&[f32], &[f32], &mut Vec<T>),
     ) -> Vec<T> {
-        let complete = (raw.len() + usize::from(self.pending_low_byte.is_some())) / 2;
+        let complete = usize::midpoint(raw.len(), usize::from(self.pending_low_byte.is_some()));
         // Per-call raw-domain telemetry (G6): every full container decoded by
         // this call counts toward `last_raw_samples`.
         self.last_raw_samples = complete as u64;

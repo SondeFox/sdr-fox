@@ -5,8 +5,9 @@
 //! RTL-SDR block size (262 144 bytes = 131 072 complex samples ≈ one default
 //! librtlsdr buffer at 2.4 MS/s).
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use sdr_fox_simd::{cu8_to_cf32, cu8_to_cf32_scalar, cu8_to_cs16, cu8_to_cs8, Spectrum};
+use std::hint::black_box;
 
 const BLOCK_BYTES: usize = 262_144; // one default librtlsdr async buffer
 

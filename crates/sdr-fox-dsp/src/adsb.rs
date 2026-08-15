@@ -282,8 +282,10 @@ impl AdsbDecoder {
     pub fn decode_block(&mut self, cu8: &[u8]) -> Vec<AdsbFrame> {
         // Convert directly into the retained streaming buffer instead of
         // allocating a second full-block magnitude Vec.
-        self.pending
-            .reserve((cu8.len() + usize::from(self.pending_i.is_some())) / 2);
+        self.pending.reserve(usize::midpoint(
+            cu8.len(),
+            usize::from(self.pending_i.is_some()),
+        ));
         let mut offset = 0usize;
         if let Some(i) = self.pending_i.take() {
             if let Some(&q) = cu8.first() {

@@ -1,7 +1,8 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use sdr_fox_dsp::demods::SsbDemag;
 use sdr_fox_dsp::filters::{ComplexLowPass, LowPass};
 use sdr_fox_dsp::{adsb, FmDemod, PolyphaseChannelizer};
+use std::hint::black_box;
 
 fn deterministic_iq(complex_samples: usize) -> Vec<f32> {
     (0..complex_samples)
