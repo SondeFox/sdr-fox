@@ -62,7 +62,7 @@ jni = "0.22"
 clap = { version = "4", features = ["derive", "env"] }
 
 # Dev-only
-criterion = "0.5"
+criterion = "0.8"
 
 [profile.release]
 opt-level = 3
