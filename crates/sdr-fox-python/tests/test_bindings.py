@@ -50,7 +50,7 @@ def _open_first_rtlsdr():
         if (
             "not found" in message
             or "no device" in message
-            or ("no matching" in message and "device at index" in message)
+            or message.startswith("no matching rtlsdr device at index ")
         ):
             return None
         raise
