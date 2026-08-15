@@ -46,12 +46,17 @@ def _open_first_rtlsdr():
     try:
         return sdr_fox.SdrFox.open(0, kind="rtl-sdr")
     except RuntimeError as e:
-        if "not found" in str(e) or "no device" in str(e).lower():
+        message = str(e).lower()
+        if (
+            "not found" in message
+            or "no device" in message
+            or message.startswith("no matching rtlsdr device at index ")
+        ):
             return None
         raise
 
 
-def test_open_and_set_frequency():
+def test_hardware_open_and_set_frequency():
     sdr = _open_first_rtlsdr()
     if sdr is None:
         pytest.skip("no RTL-SDR attached")

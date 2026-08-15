@@ -13,10 +13,7 @@ fn airspy_open_probe() {
     assert_eq!(info.vendor_id, 0x1d50);
     assert_eq!(info.product_id, 0x60a1);
     assert!(matches!(info.kind, sdr_fox_core::DeviceKind::Airspy));
-    println!(
-        "Airspy: name={}, serial={}",
-        &info.product_name, &info.serial
-    );
+    println!("Airspy: name={}, serial={}", info.product_name, info.serial);
 }
 
 #[test]
