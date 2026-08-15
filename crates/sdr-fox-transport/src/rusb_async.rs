@@ -115,6 +115,9 @@ fn event_stop_handle<H: RawLibusbHandleOwner>(
     })
 }
 
+// `suseconds_t` is `i64` on Linux but `i32` on macOS. The bounded cast is
+// portable across both, while Clippy only considers it lossless on Linux.
+#[allow(clippy::cast_lossless)]
 fn event_timeout_for(timeout: Duration) -> libc::timeval {
     libc::timeval {
         tv_sec: timeout.as_secs().try_into().unwrap_or(libc::time_t::MAX),
