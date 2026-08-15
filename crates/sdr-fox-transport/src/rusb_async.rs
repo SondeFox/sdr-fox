@@ -120,7 +120,8 @@ fn event_timeout_for(timeout: Duration) -> libc::timeval {
         tv_sec: timeout.as_secs().try_into().unwrap_or(libc::time_t::MAX),
         // `subsec_micros` is at most 999_999, which fits `suseconds_t` on
         // every supported host (including macOS, where it is an `i32`).
-        tv_usec: timeout.subsec_micros() as libc::suseconds_t,
+        tv_usec: libc::suseconds_t::try_from(u64::from(timeout.subsec_micros()))
+            .expect("subsecond microseconds fit in suseconds_t"),
     }
 }
 
