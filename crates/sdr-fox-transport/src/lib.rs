@@ -73,17 +73,63 @@ pub use stream::{
 
 /// One USB device discovered in bus order, with the index expected by an
 /// `(vendor_id, product_id)` backend opener.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// The string descriptors are **best-effort**: a device may expose none of
+/// them, and on some platforms or permission levels the OS withholds them
+/// even when the device has them, so `None` means "unknown", never "the
+/// device has no such string". They are named after the fields of
+/// `sdr_fox_core::DeviceDescriptor` (not after nusb's accessors) so the copy
+/// at each descriptor-construction site is one-to-one and greppable.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsbDeviceLocation {
     /// USB vendor ID.
     pub vendor_id: u16,
     /// USB product ID.
     pub product_id: u16,
+    /// Manufacturer string descriptor, if the OS handed one over.
+    pub vendor_name: Option<String>,
+    /// Product string descriptor, if the OS handed one over.
+    pub product_name: Option<String>,
+    /// Serial string descriptor, if the OS handed one over.
+    pub serial: Option<String>,
     /// Zero-based occurrence among devices with this exact VID/PID.
     pub match_index: usize,
 }
 
+/// Fold one enumerated device into a [`UsbDeviceLocation`], assigning the
+/// next per-VID/PID `match_index` from `counts`.
+///
+/// Split out of [`enumerate_usb_devices`] so the mapping — string descriptors
+/// included — is unit-testable without walking a real USB bus (nusb's device
+/// info type cannot be constructed in tests).
+#[cfg(not(target_os = "android"))]
+fn location_for_device(
+    vendor_id: u16,
+    product_id: u16,
+    vendor_name: Option<&str>,
+    product_name: Option<&str>,
+    serial: Option<&str>,
+    counts: &mut std::collections::HashMap<(u16, u16), usize>,
+) -> UsbDeviceLocation {
+    let match_index = counts.entry((vendor_id, product_id)).or_default();
+    let location = UsbDeviceLocation {
+        vendor_id,
+        product_id,
+        vendor_name: vendor_name.map(str::to_owned),
+        product_name: product_name.map(str::to_owned),
+        serial: serial.map(str::to_owned),
+        match_index: *match_index,
+    };
+    *match_index += 1;
+    location
+}
+
 /// Enumerate USB devices once and compute stable per-VID/PID opener indices.
+///
+/// Each location also carries the device's manufacturer/product/serial string
+/// descriptors when the OS exposes them, so callers can surface real device
+/// identity (e.g. `sdrfox info`) instead of blanks. Absent strings are `None`,
+/// never an error — see [`UsbDeviceLocation`].
 ///
 /// Not available on Android: the platform gives an unprivileged process no way
 /// to walk the USB bus, so a device arrives as a file descriptor handed down by
@@ -106,15 +152,14 @@ pub fn enumerate_usb_devices() -> Result<Vec<UsbDeviceLocation>, sdr_fox_core::S
     let mut counts = HashMap::<(u16, u16), usize>::new();
     Ok(devices
         .map(|device| {
-            let key = (device.vendor_id(), device.product_id());
-            let match_index = counts.entry(key).or_default();
-            let location = UsbDeviceLocation {
-                vendor_id: key.0,
-                product_id: key.1,
-                match_index: *match_index,
-            };
-            *match_index += 1;
-            location
+            location_for_device(
+                device.vendor_id(),
+                device.product_id(),
+                device.manufacturer_string(),
+                device.product_string(),
+                device.serial_number(),
+                &mut counts,
+            )
         })
         .collect())
 }
@@ -164,5 +209,49 @@ pub fn open_default(
         }
         RusbTransport::open(vendor_id, product_id, index)
             .map(|t| Box::new(t) as Box<dyn sdr_fox_core::Transport>)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn bus_strings_map_onto_the_location_and_absent_ones_stay_none() {
+        let mut counts = HashMap::new();
+        let with_strings = location_for_device(
+            0x0bda,
+            0x2838,
+            Some("Nooelec"),
+            Some("SMArt XTR v5"),
+            Some("38956405"),
+            &mut counts,
+        );
+        assert_eq!(with_strings.vendor_id, 0x0bda);
+        assert_eq!(with_strings.product_id, 0x2838);
+        assert_eq!(with_strings.vendor_name.as_deref(), Some("Nooelec"));
+        assert_eq!(with_strings.product_name.as_deref(), Some("SMArt XTR v5"));
+        assert_eq!(with_strings.serial.as_deref(), Some("38956405"));
+
+        let without_strings = location_for_device(0x1d50, 0x60a1, None, None, None, &mut counts);
+        assert_eq!(without_strings.vendor_name, None);
+        assert_eq!(without_strings.product_name, None);
+        assert_eq!(without_strings.serial, None);
+    }
+
+    #[test]
+    fn match_index_counts_per_vid_pid_and_ignores_strings() {
+        let mut counts = HashMap::new();
+        // Two dongles with the same VID/PID but different serials must still
+        // get distinct opener indices — the index is the opener's coordinate,
+        // the strings are identity metadata only.
+        let first = location_for_device(0x0bda, 0x2838, None, None, Some("A"), &mut counts);
+        let second = location_for_device(0x0bda, 0x2838, None, None, Some("B"), &mut counts);
+        let other_family = location_for_device(0x1d50, 0x60a1, None, None, None, &mut counts);
+        assert_eq!(first.match_index, 0);
+        assert_eq!(second.match_index, 1);
+        assert_eq!(other_family.match_index, 0);
     }
 }

@@ -184,13 +184,45 @@ fn run(cli: Cli) -> Result<(), String> {
     }
 }
 
+/// The device's own identity as the USB bus reports it: manufacturer and
+/// product string, whichever of the two are present. Returns `None` when the
+/// bus supplied neither, which is the case on any device without string
+/// descriptors and on platforms that withhold them — callers fall back to the
+/// static family label.
+fn bus_label(location: &sdr_fox_transport::UsbDeviceLocation) -> Option<String> {
+    match (
+        location.vendor_name.as_deref(),
+        location.product_name.as_deref(),
+    ) {
+        (Some(vendor), Some(product)) => Some(format!("{vendor} {product}")),
+        (Some(only), None) | (None, Some(only)) => Some(only.to_string()),
+        (None, None) => None,
+    }
+}
+
 fn list_devices() -> Result<(), String> {
     let devices = crate::device_open::enumerate_devices().map_err(|error| error.to_string())?;
     for (index, device) in devices.iter().enumerate() {
-        let location = device.location;
+        let location = &device.location;
+        // Lead with the device's own strings when the bus supplied them: the
+        // static family label is identical for every dongle of a family, so
+        // with two plugged in it cannot say which is which, whereas the
+        // product string and serial can. The family label is kept alongside
+        // because it carries what sdr-fox decided to treat the device AS,
+        // which the vendor string does not. When the bus gave us nothing the
+        // line is byte-for-byte what it always was.
+        let label = match bus_label(location) {
+            Some(from_bus) => format!("{from_bus} [{}]", device.name),
+            None => device.name.to_string(),
+        };
         println!(
-            "  {index}: {} (vid={:#06x} pid={:#06x})",
-            device.name, location.vendor_id, location.product_id
+            "  {index}: {label} (vid={:#06x} pid={:#06x}{})",
+            location.vendor_id,
+            location.product_id,
+            location
+                .serial
+                .as_deref()
+                .map_or_else(String::new, |serial| format!(", sn={serial}")),
         );
     }
     if devices.is_empty() {
@@ -207,6 +239,7 @@ fn info(device: usize) -> Result<(), String> {
         "  vendor/product: {:#06x}:{:#06x}",
         info.vendor_id, info.product_id
     );
+    println!("  vendor:         {}", info.vendor_name);
     println!("  name:           {}", info.product_name);
     println!("  serial:         {}", info.serial);
     println!("  kind:           {:?}", info.kind);
@@ -498,6 +531,51 @@ mod tests {
     use clap::CommandFactory;
 
     use super::*;
+
+    fn usb_location(
+        vendor_name: Option<&str>,
+        product_name: Option<&str>,
+    ) -> sdr_fox_transport::UsbDeviceLocation {
+        sdr_fox_transport::UsbDeviceLocation {
+            vendor_id: 0x0bda,
+            product_id: 0x2838,
+            vendor_name: vendor_name.map(str::to_string),
+            product_name: product_name.map(str::to_string),
+            serial: None,
+            match_index: 0,
+        }
+    }
+
+    /// Both strings present: the listing leads with the device's own identity,
+    /// which is what tells two dongles of the same family apart.
+    #[test]
+    fn bus_label_joins_vendor_and_product() {
+        assert_eq!(
+            bus_label(&usb_location(Some("Nooelec"), Some("SMArt XTR v5"))).as_deref(),
+            Some("Nooelec SMArt XTR v5")
+        );
+    }
+
+    /// Only one string present: report it rather than dropping to the family
+    /// label, which would discard information the bus actually gave us.
+    #[test]
+    fn bus_label_uses_whichever_string_is_present() {
+        assert_eq!(
+            bus_label(&usb_location(None, Some("SMArt XTR v5"))).as_deref(),
+            Some("SMArt XTR v5")
+        );
+        assert_eq!(
+            bus_label(&usb_location(Some("Nooelec"), None)).as_deref(),
+            Some("Nooelec")
+        );
+    }
+
+    /// No strings: `None`, so the caller prints exactly the pre-existing line.
+    /// Devices without string descriptors must not regress to a blank label.
+    #[test]
+    fn bus_label_is_none_without_any_string() {
+        assert_eq!(bus_label(&usb_location(None, None)), None);
+    }
 
     fn capture_args(format: FormatArg) -> CaptureArgs {
         CaptureArgs {

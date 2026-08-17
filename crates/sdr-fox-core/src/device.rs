@@ -26,7 +26,10 @@ pub struct DeviceDescriptor {
     pub product_id: u16,
     /// Manufacturer string (if the device exposes one).
     pub vendor_name: Option<String>,
-    /// Product string (used for Blog V4 detection, Airspy model, etc.).
+    /// Product string (if the device exposes one). Nothing branches on it —
+    /// Blog V4 and Airspy model detection are VID/PID- and firmware-based —
+    /// it is carried into [`DeviceInfo`] so user-facing tools can report the
+    /// device's real identity.
     pub product_name: Option<String>,
     /// Device serial string (if present).
     pub serial: Option<String>,
