@@ -15,6 +15,12 @@ pub const RTL_XTAL_HZ: u32 = 28_800_000;
 /// Power-on and reset the demodulator — the chip bring-up sequence that
 /// `rtlsdr_init_baseband` performs in the Osmocom reference driver.
 ///
+/// This is the tuner-agnostic half of bring-up: it is safe to run before the
+/// tuner probe has identified the chip. The tuner-specific demod
+/// configuration (IF frequency, spectrum inversion, ADC input selection)
+/// lives in `open::configure_demod_for_tuner` and runs once the probe knows
+/// which architecture — low-IF R82xx or zero-IF E4000 — is fitted.
+///
 /// # Errors
 ///
 /// Returns [`SdrError::Transport`] on any register-access failure.
@@ -34,10 +40,10 @@ pub fn init_baseband(transport: &mut dyn Transport) -> Result<(), SdrError> {
     demod_write_reg(transport, 1, 0x01, 0x14, 1)?;
     demod_write_reg(transport, 1, 0x01, 0x10, 1)?;
     // Disable spectrum inversion and ACR (automatic sample-rate correction).
-    // NOTE: osmocom writes 0x00 here in init_baseband, then the R820T2
+    // NOTE: osmocom writes 0x00 here in init_baseband, then the R820T
     // tuner-open path (rtlsdr_open) overrides with 0x01 (enable inversion).
-    // We do the R820T2-specific override at the end of init_baseband since
-    // this is the only tuner we currently support.
+    // That override is tuner-specific — a zero-IF tuner (E4000) must keep
+    // inversion off — so it lives in `open::configure_demod_for_tuner`.
     demod_write_reg(transport, 1, 0x15, 0x00, 1)?;
     demod_write_reg(transport, 1, 0x16, 0x0000, 2)?;
     // Clear DDC shift AND IF frequency registers (osmocom: 0x16 through 0x1b).
@@ -64,7 +70,10 @@ pub fn init_baseband(transport: &mut dyn Transport) -> Result<(), SdrError> {
     // `opt_adc_iq = 0`, default ADC_I/ADC_Q datapath.
     //
     // Keep this distinct from `(0, 0x08) = 0x4d`: the two registers configure
-    // different parts of initialization and both writes are required.
+    // different parts of initialization and both writes are required. That
+    // companion is tuner-specific — I-only for the low-IF R82xx, I+Q for the
+    // zero-IF E4000 — so it lives in `open::configure_demod_for_tuner`; this
+    // one is unconditional.
     //
     // The cost of losing it is severe and its signature is deceptive. Bit 7
     // gates the ADC datapath feeding the USB EP-A FIFO, and it is set
@@ -83,26 +92,8 @@ pub fn init_baseband(transport: &mut dyn Transport) -> Result<(), SdrError> {
     // re-enumerated. Testing after any such run hides the bug completely.
     demod_write_reg(transport, 0, 0x06, 0x80, 1)?;
 
-    // === R820T2-specific demod configuration (from osmocom rtlsdr_open) ===
-    // These writes happen AFTER the generic init, specific to R820T/R828D tuners.
-    // They are CRITICAL for signal reception — without them, the ADC delivers
-    // constant 128 (no RF path).
-
-    // Disable Zero-IF mode (R820T2 uses a 3.57 MHz IF, NOT zero-IF).
-    // Osmocom writes 0x1a here, NOT 0x1b.
-    demod_write_reg(transport, 1, 0xb1, 0x1a, 1)?;
-
-    // Enable I-only ADC input (direct sampling mode for the tuner's IF output).
-    // Osmocom writes this in the R820T branch of `rtlsdr_open`
-    // (librtlsdr.c:1709). It is the companion of `(0, 0x06) = 0x80` above, not
-    // a replacement for it — see the note there.
-    demod_write_reg(transport, 0, 0x08, 0x4d, 1)?;
-
-    // Enable spectrum inversion (required for the R820T2's IF architecture).
-    demod_write_reg(transport, 1, 0x15, 0x01, 1)?;
-
-    // Disable 4.096 MHz clock output on pin TP_CK0. (Not actually tuner-
-    // specific: osmocom issues this write at the end of init_baseband.)
+    // Disable 4.096 MHz clock output on pin TP_CK0. (Not tuner-specific:
+    // osmocom issues this write at the end of init_baseband.)
     demod_write_reg(transport, 0, 0x0d, 0x83, 1)?;
     Ok(())
 }
@@ -454,12 +445,10 @@ mod tests {
             vec![0x80],
             "default ADC_I/ADC_Q datapath is 0x80"
         );
-        // Its companion, which a previous change wrongly treated as a substitute.
-        let in_phase = recorded
-            .iter()
-            .find(|r| r.value == (0x08 << 8) | 0x20 && r.direction == TransferDirection::Out)
-            .expect("init_baseband must also write demod (0, 0x08)");
-        assert_eq!(in_phase.data, vec![0x4d], "in-phase ADC input is 0x4d");
+        // Its companion `(0, 0x08)` — which a previous change wrongly treated
+        // as a substitute — is tuner-specific (I-only for R82xx, I+Q for the
+        // zero-IF E4000) and now lives in `open::configure_demod_for_tuner`;
+        // its presence on both paths is pinned by the tests there.
     }
 
     /// `reset_buffer` flushes `EPA_CTL` with 0x1002 then 0x0000 — both must be

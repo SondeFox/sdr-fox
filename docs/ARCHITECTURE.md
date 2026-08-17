@@ -17,7 +17,7 @@ sdr-fox-dsp         demodulators (WBFM/NBFM/AM/SSB) + ADS-B + WAV/PNG writers
 sdr-fox-transport   Transport trait + nusb + desktop rusb + mock + streaming
    ▲                 (depends on core, simd)
    │
-sdr-fox-rtlsdr      RTL2832 control plane + R820T2 tuner  (core, transport, simd)
+sdr-fox-rtlsdr      RTL2832 control plane + R82xx/E4000 tuners  (core, transport, simd)
 sdr-fox-airspy      Airspy R2/Mini + the 2× decimation fix (core, transport, simd)
    │
    ├── sdr-fox-cabi     stable extern "C" surface  (core, rtlsdr, airspy, transport)
@@ -87,9 +87,11 @@ tests) so they're unit-testable without a transport. One module per chip.
 
 ## Known limitations (documented, not silent)
 
-E4000/FC0012/FC0013/FC2580 tuners and Blog V4 detection are trait-wired but not
-implemented (R820T2 is the deep implementation); a probe that finds one of
-those chips — or no tuner at all — fails the open with
+The R82xx family (R820T2 is the deep implementation) and the E4000 are driven.
+The E4000 is zero-IF: the demod runs with IF = 0, no spectrum inversion, and
+both ADC inputs, unlike the R82xx low-IF path. FC0012/FC0013/FC2580 tuners and
+Blog V4 detection are trait-wired but not implemented; a probe that finds one
+of those chips — or no tuner at all — fails the open with
 `TunerError::NoSupportedTuner` rather than a misleading PLL error. macOS
 defaults to a device-local rusb context because nusb control-OUT can stall on
 live RTL-SDR hardware. USB teardown, Android fd streaming, and throughput have

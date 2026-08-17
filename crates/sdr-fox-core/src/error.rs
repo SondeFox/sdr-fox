@@ -189,8 +189,8 @@ pub enum TunerError {
     /// No supported tuner chip responded during the open-time probe.
     ///
     /// Distinct from [`TunerError::PllProgrammingFailed`]: this means the
-    /// device carries a tuner sdr-fox does not drive (e.g. E4000/FC0012/
-    /// FC0013), or no tuner ACKed at all — not that a supported tuner failed
+    /// device carries a tuner sdr-fox does not drive (e.g. FC0012/FC0013/
+    /// FC2580), or no tuner ACKed at all — not that a supported tuner failed
     /// to program.
     #[error("no supported tuner detected")]
     NoSupportedTuner,

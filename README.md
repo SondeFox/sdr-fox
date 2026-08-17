@@ -10,7 +10,8 @@ Python, Android JNI, and command-line interfaces.
 
 ## What is here
 
-- RTL2832U support for R820T/R820T2/R828D and legacy E4000/FC-series tuners.
+- RTL2832U support for R820T/R820T2/R828D and the legacy E4000; the
+  FC0012/FC0013/FC2580 tuners are recognised but not yet driven.
 - Airspy R2 and Mini support, including real-to-IQ synthesis for the Mini.
 - A bounded multi-transfer streaming engine with loss and sequence metadata.
 - Runtime-dispatched IQ conversion: AVX2, baseline SSE2, NEON, and scalar
