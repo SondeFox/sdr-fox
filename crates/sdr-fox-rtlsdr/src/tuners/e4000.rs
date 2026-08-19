@@ -67,12 +67,32 @@ pub const E4000_CHECK_VAL: u8 = 0x40;
 /// RTL2832 always feeds the tuner its own 28.8 MHz crystal.
 pub const E4000_XTAL_HZ: u32 = 28_800_000;
 
-/// Lowest tunable frequency. Verified on hardware: the PLL locks at 52 MHz
-/// and fails at 51 MHz.
+/// Nominal lowest tunable frequency, for callers planning a sweep.
+///
+/// Advisory, not enforced — see [`TUNE_ENVELOPE_MIN_HZ`]. Individual chips
+/// differ: a NESDR Smart XTR locked at 52 MHz and failed at 51, while a NESDR
+/// `SMArTee` XTR failed at 52 and reported a 53 MHz floor.
 pub const E4000_MIN_HZ: u64 = 52_000_000;
-/// Highest tunable frequency. Verified on hardware: the PLL locks at
-/// 2200 MHz and fails at 2201 MHz.
+/// Nominal highest tunable frequency, on the same advisory terms as
+/// [`E4000_MIN_HZ`]. Measured spread across two boards: 2200 MHz on one,
+/// 2221 MHz on the other.
 pub const E4000_MAX_HZ: u64 = 2_200_000_000;
+
+/// Hard lower bound for [`Tuner::set_freq`]: below this the request is refused
+/// without touching the chip.
+///
+/// This is deliberately *wider* than [`E4000_MIN_HZ`]. The nominal figure is
+/// what a typical chip manages, not a limit the silicon enforces, and the two
+/// boards measured here disagree about it by a megahertz. Refusing at the
+/// nominal value would deny frequencies a given chip can genuinely reach — the
+/// same false-negative the L-band hole used to produce. The envelope exists
+/// only to keep obvious nonsense away from the synthesizer; inside it the PLL
+/// lock bit is the authority.
+const TUNE_ENVELOPE_MIN_HZ: u64 = 50_000_000;
+/// Hard upper bound for [`Tuner::set_freq`], on the same terms as
+/// [`TUNE_ENVELOPE_MIN_HZ`]. Set clear of the highest edge observed on real
+/// hardware (2221 MHz) so a better-binned chip is not artificially capped.
+const TUNE_ENVELOPE_MAX_HZ: u64 = 2_300_000_000;
 
 /// Nominal last usable frequency below the L-band coverage hole. Advisory,
 /// not enforced: the edge is an analog VCO limit and is marginal in practice
@@ -267,7 +287,7 @@ struct SynthPlan {
 /// outside the tunable range (including the L-band hole).
 fn synth_plan(hz: u64) -> Result<SynthPlan, TunerError> {
     let fail = || TunerError::PllNotLocked { freq_hz: hz };
-    if !(E4000_MIN_HZ..=E4000_MAX_HZ).contains(&hz) {
+    if !(TUNE_ENVELOPE_MIN_HZ..=TUNE_ENVELOPE_MAX_HZ).contains(&hz) {
         return Err(fail());
     }
     // NOTE: the L-band hole is deliberately NOT rejected here. Its edges are
@@ -706,10 +726,13 @@ impl Tuner for E4000 {
     /// Program the synthesizer, select the band and RF tracking filter, and
     /// verify PLL lock.
     ///
-    /// Frequencies outside 52–2200 MHz, and inside the 1101–1241 MHz L-band
-    /// hole, are rejected before any register write with
-    /// [`TunerError::PllNotLocked`] — the identical failure the hardware
-    /// reports when asked to tune there, made deterministic and immediate.
+    /// Only frequencies outside the [`TUNE_ENVELOPE_MIN_HZ`]..=
+    /// [`TUNE_ENVELOPE_MAX_HZ`] envelope are refused before any register
+    /// write, with [`TunerError::PllNotLocked`]. Everything inside it —
+    /// including the nominal L-band hole and the margins beyond
+    /// [`E4000_MIN_HZ`]/[`E4000_MAX_HZ`] — is programmed and settled by
+    /// reading the chip's own lock bit, because both the hole's edges and the
+    /// range's are analog limits that differ from chip to chip.
     fn set_freq(&mut self, bus: &mut dyn TunerBus, hz: u64) -> Result<(), TunerError> {
         let plan = synth_plan(hz)?;
 
@@ -1036,19 +1059,37 @@ mod tests {
         );
     }
 
+    /// The nominal edges must tune, and so must frequencies beyond them that a
+    /// better-binned chip can reach. A NESDR `SMArTee` XTR reports a 2221 MHz
+    /// ceiling where a NESDR Smart XTR stops at 2200; enforcing the nominal
+    /// figure would deny the former ~21 MHz of genuine range.
     #[test]
-    fn set_freq_covers_both_range_edges() {
-        for hz in [E4000_MIN_HZ, E4000_MAX_HZ] {
+    fn set_freq_covers_both_range_edges_and_beyond_the_nominal_ones() {
+        for hz in [
+            E4000_MIN_HZ,
+            E4000_MAX_HZ,
+            E4000_MIN_HZ - 1,
+            E4000_MAX_HZ + 21_000_000,
+            TUNE_ENVELOPE_MIN_HZ,
+            TUNE_ENVELOPE_MAX_HZ,
+        ] {
             let mut bus = MockBus::responsive();
             let mut tuner = E4000::new();
-            tuner.set_freq(&mut bus, hz).unwrap();
+            tuner
+                .set_freq(&mut bus, hz)
+                .unwrap_or_else(|e| panic!("{hz}: a locking chip must tune: {e:?}"));
             assert_eq!(tuner.last_freq_hz(), hz);
         }
     }
 
     #[test]
     fn set_freq_rejects_out_of_range_without_writing() {
-        for hz in [0, E4000_MIN_HZ - 1, E4000_MAX_HZ + 1, u64::MAX] {
+        for hz in [
+            0,
+            TUNE_ENVELOPE_MIN_HZ - 1,
+            TUNE_ENVELOPE_MAX_HZ + 1,
+            u64::MAX,
+        ] {
             let mut bus = MockBus::responsive();
             let mut tuner = E4000::new();
             let err = tuner.set_freq(&mut bus, hz).unwrap_err();
