@@ -443,12 +443,7 @@ fn open_by_index(index: usize, kind: Kind) -> Result<Box<dyn SdrDevice>, sdr_fox
     } else {
         DeviceKind::Airspy
     };
-    open_known_device(
-        selected.match_index,
-        device_kind,
-        selected.vendor_id,
-        selected.product_id,
-    )
+    open_known_device(&selected, device_kind)
 }
 
 const fn is_rtl_id(vid: u16, pid: u16) -> bool {
@@ -478,25 +473,37 @@ fn select_location(
             .chain(locations.iter().filter(is_airspy))
             .nth(index),
     }
-    .copied()
+    .cloned()
+}
+
+/// Build the open descriptor for a located device, forwarding the bus's
+/// best-effort string descriptors so the opened device's `DeviceInfo`
+/// reports its real manufacturer/product/serial instead of blanks.
+fn descriptor_for(
+    location: &sdr_fox_transport::UsbDeviceLocation,
+    kind: DeviceKind,
+) -> DeviceDescriptor {
+    DeviceDescriptor {
+        vendor_id: location.vendor_id,
+        product_id: location.product_id,
+        vendor_name: location.vendor_name.clone(),
+        product_name: location.product_name.clone(),
+        serial: location.serial.clone(),
+        index: location.match_index,
+        kind,
+    }
 }
 
 fn open_known_device(
-    index: usize,
+    location: &sdr_fox_transport::UsbDeviceLocation,
     device_kind: DeviceKind,
-    vid: u16,
-    pid: u16,
 ) -> Result<Box<dyn SdrDevice>, sdr_fox_core::SdrError> {
-    let desc = DeviceDescriptor {
-        vendor_id: vid,
-        product_id: pid,
-        vendor_name: None,
-        product_name: None,
-        serial: None,
-        index,
-        kind: device_kind,
-    };
-    let transport = sdr_fox_transport::open_default(vid, pid, index)?;
+    let desc = descriptor_for(location, device_kind);
+    let transport = sdr_fox_transport::open_default(
+        location.vendor_id,
+        location.product_id,
+        location.match_index,
+    )?;
     let backend: Box<dyn SdrBackend> = match device_kind {
         DeviceKind::Airspy => Box::new(AirspyBackend),
         DeviceKind::RtlSdr => Box::new(RtlSdrBackend),
@@ -1104,6 +1111,9 @@ mod tests {
         sdr_fox_transport::UsbDeviceLocation {
             vendor_id: vid,
             product_id: pid,
+            vendor_name: None,
+            product_name: None,
+            serial: None,
             match_index,
         }
     }
@@ -1202,16 +1212,38 @@ mod tests {
         ];
         assert_eq!(
             select_location(&locations, 1, Kind::Rtlsdr),
-            Some(locations[2])
+            Some(locations[2].clone())
         );
         assert_eq!(
             select_location(&locations, 2, Kind::Rtlsdr),
-            Some(locations[3])
+            Some(locations[3].clone())
         );
         assert_eq!(
             select_location(&locations, 3, Kind::Auto),
-            Some(locations[1])
+            Some(locations[1].clone())
         );
+    }
+
+    #[test]
+    fn open_descriptor_carries_the_bus_string_descriptors() {
+        let mut with_strings = location(0x0bda, 0x2838, 2);
+        with_strings.vendor_name = Some("Nooelec".to_string());
+        with_strings.product_name = Some("SMArt XTR v5".to_string());
+        with_strings.serial = Some("38956405".to_string());
+        let descriptor = descriptor_for(&with_strings, DeviceKind::RtlSdr);
+        assert_eq!(descriptor.vendor_id, 0x0bda);
+        assert_eq!(descriptor.product_id, 0x2838);
+        assert_eq!(descriptor.vendor_name.as_deref(), Some("Nooelec"));
+        assert_eq!(descriptor.product_name.as_deref(), Some("SMArt XTR v5"));
+        assert_eq!(descriptor.serial.as_deref(), Some("38956405"));
+        assert_eq!(descriptor.index, 2);
+        assert_eq!(descriptor.kind, DeviceKind::RtlSdr);
+
+        let bare = location(0x1d50, 0x60a1, 0);
+        let bare_descriptor = descriptor_for(&bare, DeviceKind::Airspy);
+        assert_eq!(bare_descriptor.vendor_name, None);
+        assert_eq!(bare_descriptor.product_name, None);
+        assert_eq!(bare_descriptor.serial, None);
     }
 
     #[test]

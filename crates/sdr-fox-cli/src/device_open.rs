@@ -18,7 +18,11 @@ const PROBE_TABLE: &[(u16, u16, DeviceKind, &str)] = &[
 pub type BoxedDevice = Box<dyn SdrDevice>;
 
 /// One known SDR found by the single USB bus enumeration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Not `Copy`: the location carries the bus's best-effort string descriptors
+/// (owned `String`s), which the open path forwards into the device
+/// descriptor so `sdrfox info` can report real identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DetectedDevice {
     /// Backend opener coordinates.
     pub location: UsbDeviceLocation,
@@ -45,7 +49,7 @@ fn classify_devices(locations: &[UsbDeviceLocation]) -> Vec<DetectedDevice> {
                 .filter(|location| {
                     location.vendor_id == vendor_id && location.product_id == product_id
                 })
-                .copied()
+                .cloned()
                 .map(|location| DetectedDevice {
                     location,
                     kind,
@@ -65,28 +69,35 @@ pub fn open_device(index: usize) -> Result<BoxedDevice, SdrError> {
     let found = enumerate_devices()?;
     let selected = found
         .get(index)
-        .copied()
+        .cloned()
         .ok_or_else(|| SdrError::DeviceNotFound(format!("no device at index {index}")))?;
-    let location = selected.location;
+    let location = &selected.location;
     let transport = sdr_fox_transport::open_default(
         location.vendor_id,
         location.product_id,
         location.match_index,
     )?;
-    let descriptor = DeviceDescriptor {
-        vendor_id: location.vendor_id,
-        product_id: location.product_id,
-        vendor_name: None,
-        product_name: None,
-        serial: None,
-        index: location.match_index,
-        kind: selected.kind,
-    };
+    let descriptor = descriptor_for(&selected);
     let backend: Box<dyn SdrBackend> = match selected.kind {
         DeviceKind::Airspy => Box::new(AirspyBackend),
         _ => Box::new(RtlSdrBackend),
     };
     backend.open(&descriptor, transport)
+}
+
+/// Build the open descriptor for a detected device, forwarding the bus's
+/// best-effort string descriptors so an opened device reports its real
+/// manufacturer/product/serial instead of blanks.
+fn descriptor_for(selected: &DetectedDevice) -> DeviceDescriptor {
+    DeviceDescriptor {
+        vendor_id: selected.location.vendor_id,
+        product_id: selected.location.product_id,
+        vendor_name: selected.location.vendor_name.clone(),
+        product_name: selected.location.product_name.clone(),
+        serial: selected.location.serial.clone(),
+        index: selected.location.match_index,
+        kind: selected.kind,
+    }
 }
 
 #[cfg(test)]
@@ -97,6 +108,9 @@ mod tests {
         UsbDeviceLocation {
             vendor_id,
             product_id,
+            vendor_name: None,
+            product_name: None,
+            serial: None,
             match_index,
         }
     }
@@ -133,5 +147,35 @@ mod tests {
             assert_eq!(found[0].kind, DeviceKind::RtlSdr);
             assert_eq!(found[0].location.match_index, 7);
         }
+    }
+
+    #[test]
+    fn open_descriptor_carries_the_bus_string_descriptors() {
+        let mut with_strings = location(0x0bda, 0x2838, 3);
+        with_strings.vendor_name = Some("Nooelec".to_string());
+        with_strings.product_name = Some("SMArt XTR v5".to_string());
+        with_strings.serial = Some("38956405".to_string());
+        let detected = DetectedDevice {
+            location: with_strings,
+            kind: DeviceKind::RtlSdr,
+            name: "RTL-SDR (EEPROM)",
+        };
+        let descriptor = descriptor_for(&detected);
+        assert_eq!(descriptor.vendor_id, 0x0bda);
+        assert_eq!(descriptor.product_id, 0x2838);
+        assert_eq!(descriptor.vendor_name.as_deref(), Some("Nooelec"));
+        assert_eq!(descriptor.product_name.as_deref(), Some("SMArt XTR v5"));
+        assert_eq!(descriptor.serial.as_deref(), Some("38956405"));
+        assert_eq!(descriptor.index, 3);
+        assert_eq!(descriptor.kind, DeviceKind::RtlSdr);
+    }
+
+    #[test]
+    fn classification_preserves_string_descriptors() {
+        let mut with_serial = location(0x0bda, 0x2838, 0);
+        with_serial.serial = Some("00000001".to_string());
+        let found = classify_devices(std::slice::from_ref(&with_serial));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].location, with_serial);
     }
 }

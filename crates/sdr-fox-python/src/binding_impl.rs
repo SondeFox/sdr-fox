@@ -466,7 +466,22 @@ fn select_family_location(
             DeviceKind::Unknown => false,
         })
         .nth(index)
-        .copied()
+        .cloned()
+}
+
+/// Build the open descriptor for a located device, forwarding the bus's
+/// best-effort string descriptors so the opened device's `DeviceInfo`
+/// reports its real manufacturer/product/serial instead of blanks.
+fn descriptor_for(location: &UsbDeviceLocation, kind: DeviceKind) -> DeviceDescriptor {
+    DeviceDescriptor {
+        vendor_id: location.vendor_id,
+        product_id: location.product_id,
+        vendor_name: location.vendor_name.clone(),
+        product_name: location.product_name.clone(),
+        serial: location.serial.clone(),
+        index: location.match_index,
+        kind,
+    }
 }
 
 fn parse_device_kind(kind: Option<&str>) -> PyResult<DeviceKind> {
@@ -494,15 +509,7 @@ impl SdrFox {
                     select_family_location(&locations, index, backend_kind).ok_or_else(|| {
                         format!("no matching {backend_kind:?} device at index {index}")
                     })?;
-                let desc = DeviceDescriptor {
-                    vendor_id: selected.vendor_id,
-                    product_id: selected.product_id,
-                    vendor_name: None,
-                    product_name: None,
-                    serial: None,
-                    index: selected.match_index,
-                    kind: backend_kind,
-                };
+                let desc = descriptor_for(&selected, backend_kind);
                 let transport = sdr_fox_transport::open_default(
                     selected.vendor_id,
                     selected.product_id,
@@ -1413,5 +1420,25 @@ mod tests {
         let (stop_calls, drops) = signals.counts();
         assert!(stop_calls >= 1);
         assert_eq!(drops, 1);
+    }
+
+    #[test]
+    fn open_descriptor_carries_the_bus_string_descriptors() {
+        let with_strings = UsbDeviceLocation {
+            vendor_id: 0x0bda,
+            product_id: 0x2838,
+            vendor_name: Some("Nooelec".to_string()),
+            product_name: Some("SMArt XTR v5".to_string()),
+            serial: Some("38956405".to_string()),
+            match_index: 1,
+        };
+        let descriptor = descriptor_for(&with_strings, DeviceKind::RtlSdr);
+        assert_eq!(descriptor.vendor_id, 0x0bda);
+        assert_eq!(descriptor.product_id, 0x2838);
+        assert_eq!(descriptor.vendor_name.as_deref(), Some("Nooelec"));
+        assert_eq!(descriptor.product_name.as_deref(), Some("SMArt XTR v5"));
+        assert_eq!(descriptor.serial.as_deref(), Some("38956405"));
+        assert_eq!(descriptor.index, 1);
+        assert_eq!(descriptor.kind, DeviceKind::RtlSdr);
     }
 }
