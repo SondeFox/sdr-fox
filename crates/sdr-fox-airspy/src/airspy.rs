@@ -9,8 +9,9 @@
 //!
 //! `RECEIVER_MODE=1`, `BOARD_ID_READ=9`, `VERSION_STRING_READ=10`,
 //! `SET_SAMPLERATE=12`, `SET_FREQ=13`, `SET_LNA_GAIN=14`, `SET_MIXER_GAIN=15`,
-//! `SET_VGA_GAIN=16`, `SET_LNA_AGC=17`, `SET_MIXER_AGC=18`, `SET_RF_BIAS=20`,
-//! `GPIO_WRITE=21`, `GET_SAMPLERATES=25`, `SET_PACKING=26`.
+//! `SET_VGA_GAIN=16`, `SET_LNA_AGC=17`, `SET_MIXER_AGC=18`, `GPIO_WRITE=21`
+//! (the bias tee is GPIO port 1 pin 13 — see [`rf_bias_request`]),
+//! `GET_SAMPLERATES=25`, `SET_PACKING=26`.
 //!
 //! Gain/rate commands are DIR_IN with `wValue=0`, parameter in `wIndex`, plus a
 //! 1-byte ack read-back. Frequency is DIR_OUT with the Hz in the data payload.
@@ -81,11 +82,14 @@ pub mod cmd {
     pub const SET_LNA_AGC: u8 = 17;
     /// Enable/disable mixer AGC.
     pub const SET_MIXER_AGC: u8 = 18;
-    /// Enable/disable the 4.5 V RF bias tee (DIR_OUT, on/off in `wValue`).
-    /// This is the field-proven bias command; `GPIO_WRITE` is not used for
-    /// bias control.
+    /// `AIRSPY_SET_RF_BIAS_CMD` in the reference command enum. **Not usable for
+    /// bias control**: the reference host library (libairspy) never sends this
+    /// request — its `airspy_set_rf_bias` is a GPIO write (see
+    /// [`rf_bias_request`]) — and the firmware ignores it. Kept only because it
+    /// occupies slot 20 of the command enum.
     pub const SET_RF_BIAS: u8 = 20;
-    /// Write an Airspy GPIO.
+    /// Write an Airspy GPIO: `wValue` = 0/1 (pin level), `wIndex` =
+    /// `(port << 5) | pin`. The RF bias tee is GPIO port 1, pin 13.
     pub const GPIO_WRITE: u8 = 21;
     /// Query supported sample rates (returns a u32 LE array).
     pub const GET_SAMPLERATES: u8 = 25;
@@ -289,11 +293,19 @@ fn frequency_request(hz: u64) -> Result<ControlRequest, SdrError> {
     ))
 }
 
+/// GPIO coordinates of the 4.5 V RF bias tee, from libairspy's
+/// `airspy_set_rf_bias`, which is `airspy_gpio_write(GPIO_PORT1, GPIO_PIN13, v)`.
+const BIAS_GPIO_PORT: u16 = 1;
+const BIAS_GPIO_PIN: u16 = 13;
+
 fn rf_bias_request(on: bool) -> ControlRequest {
-    // SET_RF_BIAS(20) is the field-proven bias command (DIR_OUT, on/off in
-    // wValue): the firmware handles the GPIO details itself. Driving the
-    // GPIO directly via GPIO_WRITE(21) was a silent no-op in the field.
-    ControlRequest::vendor_out(cmd::SET_RF_BIAS, u16::from(on), 0, Vec::new())
+    // libairspy's airspy_set_rf_bias() drives the bias tee as a plain GPIO
+    // write: vendor DIR_OUT, bRequest = GPIO_WRITE(21), wValue = 0/1 (pin
+    // level), wIndex = (port << 5) | pin = (1 << 5) | 13 = 0x2D, no data.
+    // Sending SET_RF_BIAS_CMD(20) instead is silently ignored by the firmware
+    // (verified on hardware: the transfer succeeds, the bias light stays off).
+    let port_pin = (BIAS_GPIO_PORT << 5) | BIAS_GPIO_PIN;
+    ControlRequest::vendor_out(cmd::GPIO_WRITE, u16::from(on), port_pin, Vec::new())
 }
 
 impl SdrDevice for Airspy {
@@ -860,15 +872,22 @@ mod tests {
         );
         assert!(receiver.data.is_empty());
 
-        // Bias tee must use SET_RF_BIAS(20) with on/off in wValue — the
-        // field-proven command. GPIO_WRITE(21) was a silent no-op (M1).
+        // Bias tee must be a GPIO write (libairspy's airspy_set_rf_bias ==
+        // airspy_gpio_write(GPIO_PORT1, GPIO_PIN13, v)): bRequest 21, on/off
+        // in wValue, wIndex = (1 << 5) | 13 = 0x2D. Sending SET_RF_BIAS(20)
+        // is silently ignored by the firmware — the bias light stays off.
         let bias = rf_bias_request(true);
         assert_eq!(bias.direction, TransferDirection::Out);
         assert_eq!(
             (bias.request, bias.value, bias.index),
-            (cmd::SET_RF_BIAS, 1, 0)
+            (cmd::GPIO_WRITE, 1, 0x2d)
         );
         assert!(bias.data.is_empty());
+        let bias_off = rf_bias_request(false);
+        assert_eq!(
+            (bias_off.request, bias_off.value, bias_off.index),
+            (cmd::GPIO_WRITE, 0, 0x2d)
+        );
         assert!(frequency_request(u64::from(u32::MAX) + 1).is_err());
     }
 
