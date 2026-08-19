@@ -28,14 +28,15 @@ pub mod open;
 
 pub use device::{make_info, RtlSdr, RtlSdrBackend, BULK_ENDPOINT};
 
-/// Construct a tuner instance for the detected kind. v1 returns a no-op
-/// placeholder tuner for non-R820T2 kinds; the real per-tuner modules are
-/// populated as their nodes complete.
+/// Construct a tuner instance for the detected kind. The R82xx family and the
+/// E4000 have real drivers; the remaining kinds (FC0012/FC0013/FC2580) are
+/// rejected until their modules exist.
 fn tuner_factory(kind: TunerKind) -> Result<Box<dyn Tuner>, SdrError> {
     match kind {
         TunerKind::R820T | TunerKind::R820T2 | TunerKind::R828D => {
             Ok(Box::new(crate::tuners::r82xx::R82xx::new(kind)))
         }
+        TunerKind::E4000 => Ok(Box::new(crate::tuners::e4000::E4000::new())),
         other => Err(SdrError::Unsupported(format!(
             "tuner {other:?} not yet implemented"
         ))),
@@ -270,16 +271,42 @@ pub const R828D_I2C_ADDR: u8 = 0x74;
 
 /// The I2C address a tuner of the given kind answers on.
 ///
-/// Kinds without a driver never reach an I2C bus — [`tuner_factory`] rejects
-/// them before a bus is ever constructed — so the catch-all arm only ever
-/// serves the R820T family. When another tuner gains a driver, its address
-/// must be added here in the same change, or its bus would silently address
-/// a chip that is not there.
-pub(crate) const fn tuner_i2c_addr(kind: TunerKind) -> u8 {
+/// The match is exhaustive on purpose: adding a [`TunerKind`] variant is a
+/// compile error here, so a new tuner's address must be decided in the same
+/// change as its driver — it can never silently inherit 0x34 and program a
+/// chip that is not there.
+pub(crate) fn tuner_i2c_addr(kind: TunerKind) -> u8 {
     match kind {
+        TunerKind::R820T | TunerKind::R820T2 => R820T_I2C_ADDR,
         TunerKind::R828D => R828D_I2C_ADDR,
-        _ => R820T_I2C_ADDR,
+        TunerKind::E4000 => crate::tuners::e4000::E4000_I2C_ADDR,
+        // No driver exists for these kinds: [`tuner_factory`] rejects them
+        // before any bus is constructed, so this arm is unreachable by
+        // construction. It panics rather than defaulting to an address so a
+        // future driver is forced to record the real one here.
+        TunerKind::Fc0012 | TunerKind::Fc0013 | TunerKind::Fc2580 => {
+            unreachable!(
+                "tuner {kind:?} has no driver; tuner_factory rejects it before a bus is built"
+            )
+        }
     }
+}
+
+/// Whether a tuner of this kind returns register bytes bit-reversed
+/// (MSB<->LSB) when read back over the RTL2832's I2C tunnel.
+///
+/// The reversal is a behaviour of the **R82xx silicon**, not of the tunnel:
+/// R82xx chips shift register read-back bits in the opposite order from
+/// their datasheet numbering, so every byte read from one arrives
+/// bit-reversed. The osmocom reference corrects for this inside its R820T
+/// driver (`r82xx_read`), not in its generic I2C read. Other tuners — the
+/// E4000 included — return plain datasheet bytes that must not be touched;
+/// reversing them would corrupt every read, starting with the chip-id probe.
+pub(crate) const fn tuner_reverses_read_bits(kind: TunerKind) -> bool {
+    matches!(
+        kind,
+        TunerKind::R820T | TunerKind::R820T2 | TunerKind::R828D
+    )
 }
 
 /// I2C write to a tuner register: tunnel via `block = IICB`, `addr = i2c_addr`.
@@ -312,6 +339,9 @@ pub struct RtlI2cBus<'a> {
     /// of the R82xx family answers at 0x34, so a hardcoded address would make
     /// one variant program a chip that is not there.
     i2c_addr: u8,
+    /// Whether read-back bytes must be bit-reversed for this tuner — an
+    /// R82xx silicon behaviour; see [`tuner_reverses_read_bits`].
+    reverse_reads: bool,
 }
 
 impl<'a> RtlI2cBus<'a> {
@@ -322,11 +352,19 @@ impl<'a> RtlI2cBus<'a> {
     /// Takes the [`TunerKind`] rather than a raw address so no call site can
     /// pair a tuner with the wrong address — the mapping lives once, in
     /// [`tuner_i2c_addr`].
+    ///
+    /// Crate-internal on purpose. [`tuner_i2c_addr`] panics for kinds that
+    /// have no driver, on the grounds that [`tuner_factory`] rejects them
+    /// before any bus is built — an invariant this crate can enforce but an
+    /// external caller could otherwise break just by naming such a kind.
+    /// Keeping the constructor internal makes that `unreachable!` true rather
+    /// than merely intended.
     #[must_use]
-    pub fn for_tuner(transport: &'a mut dyn Transport, kind: TunerKind) -> Self {
+    pub(crate) fn for_tuner(transport: &'a mut dyn Transport, kind: TunerKind) -> Self {
         Self {
             transport,
             i2c_addr: tuner_i2c_addr(kind),
+            reverse_reads: tuner_reverses_read_bits(kind),
         }
     }
 }
@@ -356,16 +394,20 @@ impl TunerBus for RtlI2cBus<'_> {
             .map_err(|_| TunerError::I2cTransferFailed { addr: reg })?;
         let mut buf = i2c_read(self.transport, self.i2c_addr, len)
             .map_err(|_| TunerError::I2cTransferFailed { addr: reg })?;
-        // The RTL2832U firmware returns tuner register bytes over the I2C
-        // tunnel with their bits reversed (MSB↔LSB). This is a firmware quirk
-        // of the tunnel, not a property of any one tuner, so it is corrected
-        // here at the transport boundary: every byte a tuner reads through
-        // TunerBus is the logical/datasheet register byte. Without this, a
-        // register-mask read (e.g. the R82xx VCO-lock bit R2[6]) would test
-        // the wrong physical bit and the PLL lock check would be unreliable.
-        // The osmocom reference applies the same reversal in its `r82xx_read`.
-        for byte in &mut buf {
-            *byte = byte.reverse_bits();
+        // R82xx-family chips return register bytes with their bits reversed
+        // (MSB<->LSB) relative to the datasheet numbering. That is behaviour
+        // of the R82xx silicon, NOT of the RTL2832's I2C tunnel — the osmocom
+        // reference applies the correction inside its R820T driver
+        // (`r82xx_read`), not in its generic I2C read. The bus corrects it
+        // here, per tuner kind, so every R82xx driver read is the logical
+        // datasheet byte (e.g. the VCO-lock bit R2[6] tests the right
+        // physical bit), while tuners that already speak datasheet bytes —
+        // the E4000 — pass through untouched. An unconditional reversal
+        // would corrupt every E4000 read, starting with its chip-id probe.
+        if self.reverse_reads {
+            for byte in &mut buf {
+                *byte = byte.reverse_bits();
+            }
         }
         Ok(buf)
     }
@@ -537,13 +579,14 @@ mod tests {
         }
     }
 
-    /// The RTL2832 I2C tunnel returns tuner register bytes bit-reversed.
-    /// `RtlI2cBus::i2c_read` must undo that, so tuner drivers see logical
-    /// datasheet bytes and register masks (e.g. the R82xx VCO-lock bit R2[6])
-    /// test the correct physical bit. Without this, the chip-ID read returns
-    /// 0x69 (bitrev of 0x96) and the R82xx `0x40` lock mask hits the wrong bit.
+    /// R82xx silicon returns register bytes bit-reversed over the tunnel.
+    /// `RtlI2cBus::i2c_read` must undo that for R82xx kinds, so their drivers
+    /// see logical datasheet bytes and register masks (e.g. the R82xx
+    /// VCO-lock bit R2[6]) test the correct physical bit. Without this, the
+    /// chip-ID read returns 0x69 (bitrev of 0x96) and the R82xx `0x40` lock
+    /// mask hits the wrong bit.
     #[test]
-    fn rtl_i2c_bus_read_bit_reverses_each_byte() {
+    fn rtl_i2c_bus_read_bit_reverses_each_byte_for_r82xx() {
         let mut mock = MockTransport::new();
         // Wire bytes: bitrev8(0x96)=0x69, bitrev8(0x40)=0x02, bitrev8(0x20)=0x04.
         mock.push_reply(sdr_fox_transport::ScriptedReply::any_in(vec![
@@ -553,5 +596,45 @@ mod tests {
         let buf = bus.i2c_read(0x00, 3).unwrap();
         // The driver sees the logical register bytes, not the wire order.
         assert_eq!(buf, vec![0x96, 0x40, 0x20]);
+    }
+
+    /// The E4000 speaks plain datasheet bytes — the bit reversal is R82xx
+    /// silicon behaviour, not a tunnel property — so an E4000 bus must return
+    /// exactly the wire bytes. If the reversal were applied unconditionally,
+    /// the chip id 0x40 would arrive as 0x02 and every register read
+    /// (gain, PLL, DC-offset calibration) would be corrupted.
+    #[test]
+    fn rtl_i2c_bus_read_is_unreversed_for_e4000() {
+        let mut mock = MockTransport::new();
+        mock.push_reply(sdr_fox_transport::ScriptedReply::any_in(vec![
+            0x40, 0x96, 0x01,
+        ]));
+        let mut bus = RtlI2cBus::for_tuner(&mut mock, TunerKind::E4000);
+        let buf = bus.i2c_read(0x02, 3).unwrap();
+        assert_eq!(
+            buf,
+            vec![0x40, 0x96, 0x01],
+            "E4000 reads are datasheet bytes and must not be bit-reversed"
+        );
+    }
+
+    /// An E4000 bus must tunnel every access to the chip's strapped I2C
+    /// address, 0xc8 — same invariant the R828D test pins for 0x74.
+    #[test]
+    fn rtl_i2c_bus_for_e4000_addresses_0xc8() {
+        let mut mock = MockTransport::new();
+        {
+            let mut bus = RtlI2cBus::for_tuner(&mut mock, TunerKind::E4000);
+            bus.i2c_write(0x05, &[0xaa]).unwrap();
+            bus.i2c_read(0x00, 1).unwrap();
+        }
+        assert_eq!(mock.recorded().len(), 3);
+        for r in mock.recorded() {
+            assert_eq!(
+                r.value,
+                u16::from(crate::tuners::e4000::E4000_I2C_ADDR),
+                "every E4000 tunnel access must address 0xc8; got {r:?}"
+            );
+        }
     }
 }

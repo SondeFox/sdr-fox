@@ -13,12 +13,30 @@ use crate::helpers;
 fn rtl_open_probe() {
     let dev = helpers::open_rtlsdr().expect("open RTL-SDR");
     let info = dev.info();
+    // Which of the known USB ids answered is incidental (a NESDR Smart XTR
+    // enumerates as 0bda:2838, other dongles as 0bda:2832); what matters is
+    // that it was one of them and that a driven tuner was identified.
     assert_eq!(info.vendor_id, 0x0bda);
-    assert_eq!(info.product_id, 0x2832);
-    assert!(matches!(
-        info.tuner,
-        Some(sdr_fox_core::TunerKind::R820T2) | Some(sdr_fox_core::TunerKind::R820T)
-    ));
+    assert!(
+        helpers::RTL_USB_IDS
+            .iter()
+            .any(|&(_, pid)| pid == info.product_id),
+        "unexpected product id {:#06x}",
+        info.product_id
+    );
+    assert!(
+        matches!(
+            info.tuner,
+            Some(
+                sdr_fox_core::TunerKind::R820T2
+                    | sdr_fox_core::TunerKind::R820T
+                    | sdr_fox_core::TunerKind::R828D
+                    | sdr_fox_core::TunerKind::E4000
+            )
+        ),
+        "no driven tuner detected: {:?}",
+        info.tuner
+    );
     println!("RTL-SDR: serial={}, tuner={:?}", info.serial, info.tuner);
 }
 
@@ -26,18 +44,35 @@ fn rtl_open_probe() {
 #[ignore]
 fn rtl_gain_steps_match_reference() {
     let dev = helpers::open_rtlsdr().expect("open RTL-SDR");
+    let tuner = dev.info().tuner;
     let gains: Vec<i32> = dev.gains().iter().map(|g| g.tenths_db).collect();
-    // The R820T exposes 29 gain steps from 0 to 496 tenths-dB. rtl_test
-    // reports the same table; the values are tuner interface facts, so any
-    // correct driver must expose them.
-    assert_eq!(gains.len(), 29, "expected 29 gain steps");
-    assert_eq!(gains[0], 0);
-    assert_eq!(gains[28], 496);
-    // Monotonic non-decreasing.
+    // The gain table is a tuner interface fact — rtl_test reports the same
+    // values — so assert the table matching the tuner actually fitted.
+    match tuner {
+        Some(
+            sdr_fox_core::TunerKind::R820T
+            | sdr_fox_core::TunerKind::R820T2
+            | sdr_fox_core::TunerKind::R828D,
+        ) => {
+            // The R820T exposes 29 gain steps from 0 to 496 tenths-dB.
+            assert_eq!(gains.len(), 29, "expected 29 R82xx gain steps");
+            assert_eq!(gains[0], 0);
+            assert_eq!(gains[28], 496);
+        }
+        Some(sdr_fox_core::TunerKind::E4000) => {
+            // The E4000 exposes 14 gain steps from -10 to 420 tenths-dB
+            // (rtl_test: -1.0 .. 42.0 dB).
+            assert_eq!(gains.len(), 14, "expected 14 E4000 gain steps");
+            assert_eq!(*gains.first().unwrap(), -10);
+            assert_eq!(*gains.last().unwrap(), 420);
+        }
+        other => panic!("no gain reference table for tuner {other:?}"),
+    }
+    // Monotonic non-decreasing, whichever tuner is fitted.
     for w in gains.windows(2) {
         assert!(w[0] <= w[1], "gains not monotonic");
     }
-    println!("gain table: {:?}", gains);
+    println!("gain table ({tuner:?}): {gains:?}");
 }
 
 // --- Gain & AGC ---
@@ -200,8 +235,15 @@ fn rtl_spectrogram_fm_band() {
 fn rtl_wbfm_decode_broadcast() {
     helpers::ensure_artifacts_dir().expect("create artifacts directory");
     let mut dev = helpers::open_rtlsdr().expect("open RTL-SDR");
-    let iq = helpers::capture_cf32(dev.as_mut(), 91_100_000, 2_400_000, 1)
-        .expect("capture WBFM samples");
+    // Capture as CU8 first so the raw ADC codes can be checked before the
+    // discriminator hides the evidence: FM-demodulating dither yields audio
+    // energy indistinguishable from a real broadcast, so the RMS assertion
+    // below passes even on a dongle whose RF section is dead. See
+    // `helpers::assert_front_end_alive`.
+    let cu8 =
+        helpers::capture_cu8(dev.as_mut(), 91_100_000, 2_400_000, 1).expect("capture WBFM samples");
+    helpers::assert_front_end_alive(&cu8, "WBFM capture at 91.1 MHz");
+    let iq = helpers::cu8_to_cf32(cu8).expect("convert WBFM capture to CF32");
     assert!(iq.len() > 100_000, "should capture significant IQ");
     let audio = sdr_fox_dsp::fm_demod(&iq, 2_400_000.0, 48_000.0);
     assert!(!audio.is_empty(), "demod should produce audio");
@@ -313,6 +355,10 @@ fn rtl_sample_rate_accepted() {
 #[ignore]
 fn rtl_frequency_set() {
     let mut dev = helpers::open_rtlsdr().expect("open RTL-SDR");
+    // All of these sit inside every driven tuner's range — in particular
+    // inside the E4000's 52–2200 MHz span and outside its L-band gap
+    // (1101–1241 MHz, where its PLL cannot lock). Keep any additions clear
+    // of that gap, or gate them on the detected tuner kind.
     for &freq in &[88_000_000u64, 100_000_000, 440_000_000, 1_090_000_000] {
         let result = dev.set_frequency(freq);
         assert!(result.is_ok(), "frequency {freq} should be accepted");
@@ -364,8 +410,7 @@ fn rtl_spyverter_does_not_double_apply() {
 #[test]
 #[ignore = "requires RTL-SDR hardware"]
 fn rtl_port_reset_succeeds_and_device_still_streams() {
-    let mut transport =
-        sdr_fox_transport::open_default(0x0bda, 0x2832, 0).expect("open RTL-SDR transport");
+    let (mut transport, _, _) = helpers::open_rtl_transport().expect("open RTL-SDR transport");
 
     match transport.reset_device() {
         Ok(()) => println!("port reset: OK"),
@@ -409,15 +454,20 @@ fn rtl_port_reset_succeeds_and_device_still_streams() {
 fn rtl_streams_through_the_nusb_backend() {
     use sdr_fox_core::{DeviceDescriptor, DeviceKind, SdrDevice, StreamConfig};
 
-    let transport = match sdr_fox_transport::NusbTransport::open(0x0bda, 0x2832, 0) {
-        Ok(transport) => transport,
-        Err(error) => {
-            panic!("nusb could not open the RTL-SDR: {error}");
-        }
-    };
+    // nusb is opened directly (not through `open_default`), so try each
+    // known RTL USB id ourselves — the attached dongle may be 0x2832 or
+    // 0x2838.
+    let (transport, product_id) = helpers::RTL_USB_IDS
+        .iter()
+        .find_map(|&(vid, pid)| {
+            sdr_fox_transport::NusbTransport::open(vid, pid, 0)
+                .ok()
+                .map(|transport| (transport, pid))
+        })
+        .expect("nusb could not open an RTL-SDR at any known USB id");
     let descriptor = DeviceDescriptor {
         vendor_id: 0x0bda,
-        product_id: 0x2832,
+        product_id,
         vendor_name: None,
         product_name: None,
         serial: None,

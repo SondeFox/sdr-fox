@@ -5,18 +5,39 @@ use std::time::{Duration, Instant};
 use sdr_fox_airspy::AirspyBackend;
 use sdr_fox_core::{
     DeviceDescriptor, DeviceKind, IqBlock, IqSamples, SdrBackend, SdrDevice, SdrError,
-    StreamConfig, StreamSink,
+    StreamConfig, StreamSink, Transport,
 };
 use sdr_fox_rtlsdr::RtlSdrBackend;
 
 const BYTES_PER_CU8_SAMPLE: u64 = 2;
 
-/// Open an RTL-SDR at index 0.
+/// USB IDs an RTL2832U dongle may enumerate with. `0x2832` is the bare
+/// chipset id; `0x2838` is the id most SDR dongles carry in EEPROM (e.g. the
+/// NooElec NESDR Smart XTR enumerates as 0bda:2838). Hardware helpers must
+/// try both, or a test box with only one flavour plugged in cannot open it.
+pub const RTL_USB_IDS: [(u16, u16); 2] = [(0x0bda, 0x2832), (0x0bda, 0x2838)];
+
+/// Open the transport of the first RTL-SDR found, trying each known USB id.
+/// Returns the transport together with the `(vendor_id, product_id)` that
+/// matched, so callers can build an accurate descriptor.
+pub fn open_rtl_transport() -> Result<(Box<dyn Transport>, u16, u16), SdrError> {
+    let mut last_error =
+        SdrError::DeviceNotFound("no RTL-SDR present at any known USB id".to_string());
+    for (vendor_id, product_id) in RTL_USB_IDS {
+        match sdr_fox_transport::open_default(vendor_id, product_id, 0) {
+            Ok(transport) => return Ok((transport, vendor_id, product_id)),
+            Err(error) => last_error = error,
+        }
+    }
+    Err(last_error)
+}
+
+/// Open an RTL-SDR at index 0 (first known USB id that answers).
 pub fn open_rtlsdr() -> Result<Box<dyn SdrDevice>, SdrError> {
-    let transport = sdr_fox_transport::open_default(0x0bda, 0x2832, 0)?;
+    let (transport, vendor_id, product_id) = open_rtl_transport()?;
     let descriptor = DeviceDescriptor {
-        vendor_id: 0x0bda,
-        product_id: 0x2832,
+        vendor_id,
+        product_id,
         vendor_name: None,
         product_name: None,
         serial: None,
@@ -194,7 +215,7 @@ pub fn capture_cf32_samples(
     cu8_to_cf32(cu8)
 }
 
-fn cu8_to_cf32(cu8: Vec<u8>) -> Result<Vec<f32>, SdrError> {
+pub(crate) fn cu8_to_cf32(cu8: Vec<u8>) -> Result<Vec<f32>, SdrError> {
     let mut cf32 = Vec::new();
     cf32.try_reserve_exact(cu8.len())
         .map_err(|error| SdrError::InvalidParameter(format!("CF32 allocation failed: {error}")))?;
@@ -390,6 +411,46 @@ pub fn measure_throughput(
     result
 }
 
+/// The smallest number of distinct ADC codes a live front end produces in the
+/// FM broadcast band. A dongle whose tuner is powered but whose RF section is
+/// not delivering emits only converter dither — measured on the NESDR Smart
+/// XTR in that state: **5** distinct codes, hugging 127/128. A live capture at
+/// 91.1 MHz on the same board yields **42**. 16 sits with wide margin either
+/// side.
+const LIVE_FRONT_END_MIN_ADC_CODES: usize = 16;
+
+/// Assert that `data` came from a receiver that is actually receiving, not
+/// from a dongle that streams convincingly while its RF section is dead.
+///
+/// This failure mode is real and is *not* caught by demodulate-and-check-audio
+/// assertions: FM-demodulating pure dither produces large random phase steps,
+/// so its audio RMS (~0.20 measured) is the same order as a real broadcast's
+/// (~0.28). Every energy-based check downstream of the discriminator therefore
+/// passes on a dead front end. Counting distinct ADC codes separates the two
+/// cleanly, because a dead path cannot generate code diversity at all.
+///
+/// Only valid where the band guarantees strong signal — the FM broadcast band.
+/// Do not reuse at the top of the tuning range: a *live* 2 GHz capture on this
+/// board produces only 8 distinct codes, which is genuinely close to the dead
+/// case, so the check would be meaningless there.
+///
+/// # Panics
+///
+/// Panics if the capture carries too few distinct ADC codes to have come from
+/// a working front end.
+pub fn assert_front_end_alive(data: &[u8], context: &str) {
+    let codes = cu8_distinct(data);
+    assert!(
+        codes >= LIVE_FRONT_END_MIN_ADC_CODES,
+        "{context}: only {codes} distinct ADC codes across the {} bytes sampled from a \
+         {}-byte capture — the front end is delivering dither, not signal. The tuner is \
+         powered and streaming (this is not a transport fault); its RF section is dead. \
+         A full power cycle (unplug, wait, replug) clears it — a warm re-open does not.",
+        data.len().min(CU8_DISTINCT_SAMPLE_BYTES),
+        data.len()
+    );
+}
+
 /// Compute RMS of CU8 bytes centered at 128.
 pub fn cu8_rms(data: &[u8]) -> f64 {
     if data.is_empty() {
@@ -405,11 +466,17 @@ pub fn cu8_rms(data: &[u8]) -> f64 {
     (sum as f64 / data.len() as f64).sqrt()
 }
 
-/// Count distinct byte values in a CU8 buffer.
+/// How many leading bytes [`cu8_distinct`] inspects. Code diversity saturates
+/// almost immediately on a live capture, so sampling the head is enough and
+/// keeps the scan off the hot path of multi-megabyte captures.
+pub const CU8_DISTINCT_SAMPLE_BYTES: usize = 10_000;
+
+/// Count distinct byte values in a CU8 buffer, over the first
+/// [`CU8_DISTINCT_SAMPLE_BYTES`] bytes.
 pub fn cu8_distinct(data: &[u8]) -> usize {
     let mut seen = [false; 256];
     let mut count = 0;
-    for &byte in data.iter().take(10_000) {
+    for &byte in data.iter().take(CU8_DISTINCT_SAMPLE_BYTES) {
         if !seen[byte as usize] {
             seen[byte as usize] = true;
             count += 1;

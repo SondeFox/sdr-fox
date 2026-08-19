@@ -239,9 +239,10 @@ impl RtlSdr {
     ///
     /// A USB device reset wipes EVERY register written since open — the chip
     /// comes back at power-on defaults — so this reruns the whole open-time
-    /// initialisation (baseband bring-up, default IF, tuner init; shared with
-    /// the open path in `open::init_baseband_defaults` / `open::init_tuner`)
-    /// and then replays everything programmed since: sample rate, frequency
+    /// initialisation (baseband bring-up, the per-tuner demod configuration
+    /// for whichever tuner is fitted, tuner init; shared with the open path
+    /// in `open::init_baseband_defaults` / `open::init_tuner`) and then
+    /// replays everything programmed since: sample rate, frequency
     /// correction, bandwidth (which reprograms the matching IF and retunes),
     /// centre frequency, gain mode, gain requests, digital AGC, and bias-T.
     ///
@@ -249,7 +250,9 @@ impl RtlSdr {
     /// (default 2.048 MS/s) is what the liveness deadline and the caller's
     /// downstream DSP are based on, so the hardware must be made to match it.
     fn reinitialize_after_reset(&mut self) -> Result<(), SdrError> {
-        super::open::init_baseband_defaults(self.transport.as_mut())?;
+        // No re-probe is needed here: the tuner is soldered, so the kind
+        // detected at open remains the truth for the re-enumerated device.
+        super::open::init_baseband_defaults(self.transport.as_mut(), self.tuner.kind())?;
         super::open::init_tuner(self.transport.as_mut(), self.tuner.as_mut())?;
         self.sample_rate =
             baseband::set_sample_rate(self.transport.as_mut(), self.sample_rate, RTL_XTAL_HZ)?;
@@ -325,11 +328,19 @@ impl SdrDevice for RtlSdr {
     }
 
     fn set_bandwidth(&mut self, hz: u32) -> Result<(), SdrError> {
+        // A low-IF R82xx pairs every bandwidth setting with a matching demod
+        // IF, so the demod must be reprogrammed and the centre frequency
+        // retuned. The E4000 is direct-conversion (zero-IF): its IF is 0 at
+        // every bandwidth, so there is deliberately no demod IF reprogram
+        // and no retune — the filter change happens entirely inside the
+        // tuner. The remaining kinds have no driver, so no tuner instance of
+        // theirs can exist here; the match is exhaustive so a future driver
+        // must decide its IF policy in this same arm.
         let if_hz = match self.tuner.kind() {
             TunerKind::R820T | TunerKind::R820T2 | TunerKind::R828D => {
                 Some(crate::tuners::r82xx::bandwidth_config(hz).if_hz)
             }
-            _ => None,
+            TunerKind::E4000 | TunerKind::Fc0012 | TunerKind::Fc0013 | TunerKind::Fc2580 => None,
         };
         self.with_i2c_repeater(|t, tuner| {
             let mut bus = RtlI2cBus::for_tuner(t, tuner.kind());
@@ -1095,12 +1106,24 @@ mod tests {
     }
 
     /// A tuner that acks everything and logs what was programmed.
-    #[derive(Default)]
     struct StateTrackingTuner {
         inits: Arc<Mutex<usize>>,
         frequencies: Arc<Mutex<Vec<u64>>>,
         gains: Arc<Mutex<Vec<GainRequest>>>,
         modes: Arc<Mutex<Vec<GainMode>>>,
+        kind: TunerKind,
+    }
+
+    impl Default for StateTrackingTuner {
+        fn default() -> Self {
+            Self {
+                inits: Arc::default(),
+                frequencies: Arc::default(),
+                gains: Arc::default(),
+                modes: Arc::default(),
+                kind: TunerKind::R820T2,
+            }
+        }
     }
 
     impl Tuner for StateTrackingTuner {
@@ -1141,7 +1164,7 @@ mod tests {
         }
 
         fn kind(&self) -> TunerKind {
-            TunerKind::R820T2
+            self.kind
         }
     }
 
@@ -1666,6 +1689,66 @@ mod tests {
             2,
             "one reinitialisation per recovery tier"
         );
+    }
+
+    // === Zero-IF bandwidth policy (E4000) ===
+
+    #[test]
+    fn e4000_bandwidth_change_skips_demod_if_reprogram_and_retune() {
+        // The E4000 is direct-conversion: a bandwidth change is entirely a
+        // tuner-filter change. Unlike the R82xx path, it must NOT reprogram
+        // the demod IF registers (1, 0x19..0x1b) and must NOT retune the
+        // centre frequency.
+        let shared = Arc::new(Mutex::new(ProbeShared {
+            scripts: VecDeque::new(),
+            reset: ResetScript::Works,
+            resets: 0,
+            streams_started: 0,
+            control_out: Vec::new(),
+        }));
+        let tuner = StateTrackingTuner {
+            kind: TunerKind::E4000,
+            ..StateTrackingTuner::default()
+        };
+        let frequencies = Arc::clone(&tuner.frequencies);
+        let descriptor = DeviceDescriptor {
+            vendor_id: 0x0bda,
+            product_id: 0x2838,
+            vendor_name: None,
+            product_name: None,
+            serial: None,
+            index: 0,
+            kind: DeviceKind::RtlSdr,
+        };
+        let mut device = RtlSdr::new(
+            make_info(&descriptor, Some(TunerKind::E4000)),
+            Box::new(ProbeTransport {
+                shared: Arc::clone(&shared),
+            }),
+            Box::new(tuner),
+        );
+        device.set_frequency(100_000_000).unwrap();
+        device.set_bandwidth(2_000_000).unwrap();
+
+        assert_eq!(
+            frequencies.lock().unwrap().as_slice(),
+            &[100_000_000],
+            "a zero-IF bandwidth change must not retune the centre frequency"
+        );
+        for addr in [0x19u16, 0x1a, 0x1b] {
+            let value = (addr << 8) | 0x20;
+            assert_eq!(
+                shared
+                    .lock()
+                    .unwrap()
+                    .control_out
+                    .iter()
+                    .filter(|(v, _, _)| *v == value)
+                    .count(),
+                0,
+                "a zero-IF bandwidth change must not write demod IF register 0x{addr:02x}"
+            );
+        }
     }
 
     #[test]

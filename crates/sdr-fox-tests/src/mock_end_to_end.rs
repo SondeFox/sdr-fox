@@ -153,6 +153,10 @@ fn backends_match_their_vid_pid() {
 #[ignore = "requires an attached RTL-SDR; run with --ignored"]
 fn hardware_open_rtlsdr() {
     use sdr_fox_transport::NusbTransport;
-    let transport = NusbTransport::open(0x0bda, 0x2832, 0);
-    assert!(transport.is_ok(), "should open the attached RTL-SDR");
+    // An RTL dongle enumerates as 0bda:2832 (bare chipset) or 0bda:2838
+    // (EEPROM-configured, e.g. NooElec NESDR Smart XTR); accept either.
+    let opened = [(0x0bda, 0x2832), (0x0bda, 0x2838)]
+        .iter()
+        .any(|&(vid, pid)| NusbTransport::open(vid, pid, 0).is_ok());
+    assert!(opened, "should open the attached RTL-SDR at a known USB id");
 }
