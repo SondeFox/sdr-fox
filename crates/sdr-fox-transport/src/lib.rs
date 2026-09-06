@@ -202,24 +202,46 @@ pub fn open_default(
 }
 
 /// Stable identity for exact selection. macOS uses the USB topology location
-/// plus the serial when present; unplug/replug at the same port preserves it.
+/// plus full manufacturer/product/serial descriptors; enumeration order is
+/// irrelevant. Identical full descriptors cannot prove physical continuity.
 /// Moving an unnumbered receiver requires deliberate reselection.
 #[cfg(not(target_os = "android"))]
 fn stable_usb_id(info: &nusb::DeviceInfo) -> String {
-    use std::fmt::Write;
     #[cfg(target_os = "macos")]
     let location = format!("{:08x}", info.location_id());
     #[cfg(not(target_os = "macos"))]
     let location = format!("{}-{}", info.bus_id(), info.device_address());
-    let mut serial = String::new();
-    for b in info.serial_number().unwrap_or("").bytes() {
-        let _ = write!(serial, "{b:02x}");
-    }
-    format!(
-        "usb:{:04x}:{:04x}:{location}:{serial}",
+    stable_usb_id_parts(
         info.vendor_id(),
-        info.product_id()
+        info.product_id(),
+        &location,
+        info.manufacturer_string(),
+        info.product_string(),
+        info.serial_number(),
     )
+}
+
+// Separate from OS-owned DeviceInfo for deterministic replacement tests.
+// Hex is lossless UTF-8 with delimiters between components; never truncate an
+// identity. The C enumeration boundary excludes IDs >=512 bytes.
+#[cfg(not(target_os = "android"))]
+fn stable_usb_id_parts(
+    vid: u16,
+    pid: u16,
+    location: &str,
+    manufacturer: Option<&str>,
+    product: Option<&str>,
+    serial: Option<&str>,
+) -> String {
+    use std::fmt::Write;
+    let mut id = format!("usb:{vid:04x}:{pid:04x}:{location}");
+    for component in [manufacturer, product, serial] {
+        id.push(':');
+        for byte in component.unwrap_or("").bytes() {
+            let _ = write!(id, "{byte:02x}");
+        }
+    }
+    id
 }
 
 /// Enumerate stable identifiers paired with lightweight USB metadata.
@@ -284,6 +306,40 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+
+    #[test]
+    fn exact_identity_rejects_different_models_with_same_serial_on_same_port() {
+        let id = |manufacturer, product| {
+            stable_usb_id_parts(
+                0x0bda,
+                0x2838,
+                "fixed-port",
+                Some(manufacturer),
+                Some(product),
+                Some("00000001"),
+            )
+        };
+        let nooelec = id("Nooelec", "NESDR SMArt");
+        let blog = id("RTLSDRBlog", "Blog V4");
+        assert_ne!(nooelec, blog);
+        assert_eq!(blog, id("RTLSDRBlog", "Blog V4"));
+        assert_ne!(blog, id("RTLSDRBlog", "Blog V3"));
+        assert_ne!(blog, id("Other", "Blog V4"));
+    }
+
+    #[test]
+    fn descriptor_identity_encoding_is_lossless_and_component_delimited() {
+        let long = "a".repeat(300);
+        let id = |manufacturer, product| {
+            stable_usb_id_parts(1, 2, "port", Some(manufacturer), Some(product), None)
+        };
+        assert_ne!(id("a:b", "c"), id("a", "b:c"));
+        assert_ne!(id("é", "device"), id("e", "device"));
+        // Long fields must not silently share a truncated identity. The C
+        // boundary omits these entries because they do not fit its record.
+        assert_ne!(id(&long, "x"), id(&long, "y"));
+        assert!(id(&long, "x").len() >= 512);
+    }
 
     #[test]
     fn bus_strings_map_onto_the_location_and_absent_ones_stay_none() {

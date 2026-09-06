@@ -57,7 +57,13 @@ native descriptor strings and therefore can identify the attached V4.
 The generated `bindings/sdr_fox.h` adds stable receiver enumeration/open;
 actual applied rate; queried sample/gain tables; per-stage gain/AGC; tuner
 manual mode; IF bandwidth; and reference clock query. Existing APIs remain
-compatible. Mac identity uses VID/PID, topology location and serial if present.
+compatible. Mac identity uses VID/PID, topology and full manufacturer/product/serial
+descriptors. Different models with the same VID/PID and default serial cannot
+replace one another on a remembered port. All components use lossless UTF-8
+hex, and an identity too large for the bounded C record is excluded rather
+than truncated. Receivers indistinguishable by every descriptor still require
+manual reselection after detach; descriptor identity cannot prove physical
+continuity in that case.
 Open holds the exact native USB object and rejects missing/ambiguous identity;
 there is no index fallback. Port changes require deliberate reselection.
 
