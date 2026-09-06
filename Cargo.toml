@@ -73,3 +73,7 @@ strip = "symbols"
 # Keep debug symbols in the bench profile so flamegraphs are useful.
 [profile.bench]
 debug = true
+
+# Reviewed nusb 0.2.7 with an isolated macOS control-OUT fix.
+[patch.crates-io]
+nusb = { path = "vendor/nusb" }

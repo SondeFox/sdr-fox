@@ -84,6 +84,12 @@ impl NusbTransport {
             ))
         })?;
         drop(info_iter);
+        Self::open_info(&info)
+    }
+
+    /// Open the exact enumerated native object, never a replacement index.
+    #[cfg(not(target_os = "android"))]
+    pub fn open_info(info: &nusb::DeviceInfo) -> Result<Self, SdrError> {
         let device = info
             .open()
             .wait()

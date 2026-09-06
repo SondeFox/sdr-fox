@@ -516,6 +516,304 @@ fn open_known_device(
     backend.open(&desc, transport)
 }
 
+/// Fixed-size receiver descriptor. Strings are UTF-8 and NUL-terminated;
+/// oversized identities are excluded rather than truncated into collisions.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SdrFoxReceiver {
+    /// Opaque exact-selection identity; treat as private user device metadata.
+    pub id: [c_char; 512],
+    /// Hardware-reported label or family fallback.
+    pub label: [c_char; 256],
+    /// `SDRFOX_KIND_RTLSDR` or `SDRFOX_KIND_AIRSPY`.
+    pub kind: u32,
+}
+
+fn receiver_kind(location: &sdr_fox_transport::UsbDeviceLocation) -> Option<DeviceKind> {
+    if is_rtl_id(location.vendor_id, location.product_id) {
+        Some(DeviceKind::RtlSdr)
+    } else if (location.vendor_id, location.product_id) == (0x1d50, 0x60a1) {
+        Some(DeviceKind::Airspy)
+    } else {
+        None
+    }
+}
+
+fn c_text<const N: usize>(text: &str) -> [c_char; N] {
+    let mut out = [0; N];
+    let mut end = text.len().min(N.saturating_sub(1));
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    for (o, i) in out.iter_mut().zip(text.as_bytes()[..end].iter()) {
+        *o = *i as c_char;
+    }
+    out
+}
+
+/// Enumerate supported receivers without opening hardware. Returns required
+/// count (copies at most capacity entries), or -1. Re-run if count grew.
+/// `out` must hold capacity writable entries; null is permitted for capacity 0.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_enumerate(out: *mut SdrFoxReceiver, capacity: usize) -> isize {
+    if capacity > 4096 || (out.is_null() && capacity != 0) {
+        return -1;
+    }
+    ffi_safe(
+        move || {
+            let Ok(found) = sdr_fox_transport::enumerate_stable_usb_devices() else {
+                return -1;
+            };
+            let receivers: Vec<_> = found
+                .into_iter()
+                .filter_map(|(id, location)| {
+                    let kind = receiver_kind(&location)?;
+                    if id.len() >= 512 || id.contains('\0') {
+                        return None;
+                    }
+                    let label = location.product_name.as_deref().unwrap_or(match kind {
+                        DeviceKind::RtlSdr => "RTL-SDR",
+                        _ => "Airspy",
+                    });
+                    Some(SdrFoxReceiver {
+                        id: c_text(&id),
+                        label: c_text(label),
+                        kind: if kind == DeviceKind::RtlSdr {
+                            SDRFOX_KIND_RTLSDR
+                        } else {
+                            SDRFOX_KIND_AIRSPY
+                        },
+                    })
+                })
+                .collect();
+            for (i, receiver) in receivers.iter().take(capacity).enumerate() {
+                out.add(i).write(*receiver);
+            }
+            isize::try_from(receivers.len()).unwrap_or(-1)
+        },
+        -1,
+    )
+}
+
+/// Open only the selected receiver; no auto-detection/index fallback occurs.
+/// `id` must point to a NUL-terminated UTF-8 string no longer than 511 bytes;
+/// `out` is cleared before any IO. Returns null on success or thread-local error.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_open_id(
+    id: *const c_char,
+    out: *mut *mut SdrFoxDevice,
+) -> *const c_char {
+    if out.is_null() {
+        return static_err("out is null");
+    }
+    *out = std::ptr::null_mut();
+    if id.is_null() {
+        return static_err("id is null");
+    }
+    ffi_safe(
+        move || {
+            let Ok(id) = CStr::from_ptr(id).to_str() else {
+                return static_err("id is not UTF-8");
+            };
+            if id.len() >= 512 {
+                return static_err("id is too long");
+            }
+            let result = (|| {
+                let (location, transport) = sdr_fox_transport::open_stable_usb(id)?;
+                let kind = receiver_kind(&location).ok_or_else(|| {
+                    sdr_fox_core::SdrError::Unsupported("unsupported receiver".into())
+                })?;
+                let desc = descriptor_for(&location, kind);
+                match kind {
+                    DeviceKind::RtlSdr => RtlSdrBackend.open(&desc, transport),
+                    _ => AirspyBackend.open(&desc, transport),
+                }
+            })();
+            match result {
+                Ok(device) => match devices().write().ok().and_then(|mut r| {
+                    r.insert(SdrFoxDevice {
+                        device: Mutex::new(device),
+                        last_error: Mutex::new(None),
+                    })
+                }) {
+                    Some(handle) => {
+                        *out = handle;
+                        std::ptr::null()
+                    }
+                    None => static_err("device handle registry exhausted"),
+                },
+                Err(error) => static_err(&error.to_string()),
+            }
+        },
+        static_err("panic in sdrfox_open_id"),
+    )
+}
+
+/// Set a rate and report the actual applied rate atomically. Never infer DSP
+/// rate from the request. On failure *actual is zero.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_set_sample_rate_actual(
+    dev: *mut SdrFoxDevice,
+    hz: u32,
+    actual: *mut u32,
+) -> c_int {
+    if actual.is_null() {
+        return -1;
+    }
+    *actual = 0;
+    setter(dev, |d| {
+        let applied = d.set_sample_rate(hz)?;
+        *actual = applied;
+        Ok(())
+    })
+}
+
+/// Query exact hardware sample rates. Empty means continuous/nonenumerable.
+/// Returns required count, or -1. Copies at most capacity entries.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_sample_rates(
+    dev: *mut SdrFoxDevice,
+    out: *mut u32,
+    capacity: usize,
+) -> isize {
+    if capacity > 4096 || (out.is_null() && capacity != 0) {
+        return -1;
+    }
+    let Some(dev) = resolve_device(dev) else {
+        return -1;
+    };
+    ffi_safe(
+        move || {
+            let Ok(device) = dev.device.lock() else {
+                return -1;
+            };
+            let rates = device.supported_sample_rates();
+            for (i, rate) in rates.iter().take(capacity).enumerate() {
+                out.add(i).write(*rate);
+            }
+            isize::try_from(rates.len()).unwrap_or(-1)
+        },
+        -1,
+    )
+}
+
+/// One hardware-reported discrete gain value.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SdrFoxGainStep {
+    /// -1 = OVERALL, 0 = LNA, 1 = MIXER, 2 = VGA.
+    pub stage: i32,
+    /// Gain in tenths of dB (Airspy register steps are value * 10).
+    pub tenths_db: i32,
+}
+
+/// Query gain steps from the opened tuner. Returns required count, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_gain_steps(
+    dev: *mut SdrFoxDevice,
+    out: *mut SdrFoxGainStep,
+    capacity: usize,
+) -> isize {
+    if capacity > 4096 || (out.is_null() && capacity != 0) {
+        return -1;
+    }
+    let Some(dev) = resolve_device(dev) else {
+        return -1;
+    };
+    ffi_safe(
+        move || {
+            let Ok(device) = dev.device.lock() else {
+                return -1;
+            };
+            let gains: Vec<_> = device
+                .gains()
+                .iter()
+                .filter_map(|gain| {
+                    let stage = match gain.name {
+                        "OVERALL" => -1,
+                        "LNA" => 0,
+                        "MIXER" => 1,
+                        "VGA" => 2,
+                        _ => return None,
+                    };
+                    Some(SdrFoxGainStep {
+                        stage,
+                        tenths_db: gain.tenths_db,
+                    })
+                })
+                .collect();
+            for (i, gain) in gains.iter().take(capacity).enumerate() {
+                out.add(i).write(*gain);
+            }
+            isize::try_from(gains.len()).unwrap_or(-1)
+        },
+        -1,
+    )
+}
+
+/// Apply a named hardware stage; invalid integer codes fail before IO.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_set_stage_gain(
+    dev: *mut SdrFoxDevice,
+    stage: i32,
+    tenths_db: i32,
+) -> c_int {
+    setter(dev, |d| {
+        d.set_gain(GainRequest::per_stage(
+            sdr_fox_core::GainStageId::try_from(stage)?,
+            tenths_db,
+        ))
+    })
+}
+
+/// Set independent LNA or mixer AGC where supported.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_set_stage_agc(
+    dev: *mut SdrFoxDevice,
+    stage: i32,
+    on: c_int,
+) -> c_int {
+    setter(dev, |d| {
+        d.set_stage_agc(sdr_fox_core::GainStageId::try_from(stage)?, on != 0)
+    })
+}
+
+/// Select manual/automatic tuner gain mode independently of digital AGC.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_set_gain_mode(dev: *mut SdrFoxDevice, automatic: c_int) -> c_int {
+    setter(dev, |d| {
+        d.set_gain_mode(if automatic == 0 {
+            sdr_fox_core::GainMode::Manual
+        } else {
+            sdr_fox_core::GainMode::Auto
+        })
+    })
+}
+
+/// Set IF bandwidth where hardware supports it.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_set_bandwidth(dev: *mut SdrFoxDevice, hz: u32) -> c_int {
+    setter(dev, |d| d.set_bandwidth(hz))
+}
+
+/// Read the known reference oscillator rate; zero means unavailable.
+#[no_mangle]
+pub unsafe extern "C" fn sdrfox_reference_clock(dev: *mut SdrFoxDevice) -> u32 {
+    let Some(dev) = resolve_device(dev) else {
+        return 0;
+    };
+    ffi_safe(
+        move || {
+            dev.device
+                .lock()
+                .ok()
+                .and_then(|d| d.reference_clock_hz())
+                .unwrap_or(0)
+        },
+        0,
+    )
+}
+
 /// Close a device handle. Idempotent; null, stale, and repeated handles are
 /// no-ops. A call already in progress retains an [`Arc`] until it returns.
 ///
@@ -1134,6 +1432,114 @@ mod tests {
         assert!(matches!(IqFormat::from(Format::Cf32), IqFormat::Cf32));
         assert!(matches!(IqFormat::from(Format::Cs8), IqFormat::Cs8));
         assert!(matches!(IqFormat::from(Format::Cs16), IqFormat::Cs16));
+    }
+
+    struct RateDevice {
+        info: sdr_fox_core::DeviceInfo,
+    }
+    impl SdrDevice for RateDevice {
+        fn info(&self) -> &sdr_fox_core::DeviceInfo {
+            &self.info
+        }
+        fn set_sample_rate(&mut self, hz: u32) -> Result<u32, SdrError> {
+            if hz == 0 {
+                Err(SdrError::InvalidParameter("zero rate".into()))
+            } else {
+                Ok(hz + 3)
+            }
+        }
+        fn supported_sample_rates(&self) -> Vec<u32> {
+            vec![2_500_000, 3_000_000]
+        }
+        fn reference_clock_hz(&self) -> Option<u32> {
+            Some(28_800_000)
+        }
+        fn set_frequency(&mut self, _: u64) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_bandwidth(&mut self, _: u32) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_gain(&mut self, _: GainRequest) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_gain_mode(&mut self, _: sdr_fox_core::GainMode) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn gains(&self) -> &[sdr_fox_core::GainStep] {
+            &[]
+        }
+        fn set_bias_tee(&mut self, _: bool) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_agc(&mut self, _: bool) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_frequency_correction_ppm(&mut self, _: f64) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn set_upconverter(&mut self, _: Option<Upconverter>) -> Result<(), SdrError> {
+            Ok(())
+        }
+        fn start_stream(
+            &mut self,
+            _: StreamConfig,
+        ) -> Result<sdr_fox_core::StreamHandle, SdrError> {
+            Err(SdrError::DeviceBusy)
+        }
+    }
+    #[test]
+    fn actual_rate_and_capabilities_preserve_hardware_results_and_stale_safety() {
+        let handle = devices()
+            .write()
+            .unwrap()
+            .insert(SdrFoxDevice {
+                device: Mutex::new(Box::new(RateDevice {
+                    info: sdr_fox_core::DeviceInfo::default(),
+                })),
+                last_error: Mutex::new(None),
+            })
+            .unwrap();
+        unsafe {
+            let mut actual = 99;
+            assert_eq!(
+                sdrfox_set_sample_rate_actual(handle, 1_024_000, &raw mut actual),
+                0
+            );
+            assert_eq!(actual, 1_024_003);
+            assert_eq!(
+                sdrfox_set_sample_rate_actual(handle, 0, &raw mut actual),
+                -1
+            );
+            assert_eq!(actual, 0);
+            let mut rates = [0u32; 1];
+            assert_eq!(sdrfox_sample_rates(handle, rates.as_mut_ptr(), 1), 2);
+            assert_eq!(rates, [2_500_000]);
+            assert_eq!(sdrfox_reference_clock(handle), 28_800_000);
+            assert_eq!(sdrfox_set_stage_gain(handle, 99, 10), -1);
+            sdrfox_close(handle);
+            assert_eq!(sdrfox_sample_rates(handle, std::ptr::null_mut(), 0), -1);
+            assert_eq!(
+                sdrfox_set_sample_rate_actual(handle, 1_024_000, &raw mut actual),
+                -1
+            );
+        }
+    }
+    #[test]
+    fn receiver_strings_truncate_only_at_utf8_boundaries_and_terminate() {
+        let text = c_text::<5>("SDéR");
+        let bytes: Vec<_> = text.into_iter().map(|v| v.to_ne_bytes()[0]).collect();
+        assert_eq!(&bytes, b"SD\xc3\xa9\0");
+    }
+    #[test]
+    fn invalid_enumeration_and_open_arguments_do_not_touch_usb() {
+        unsafe {
+            assert_eq!(sdrfox_enumerate(std::ptr::null_mut(), 1), -1);
+            assert_eq!(sdrfox_enumerate(std::ptr::null_mut(), 4097), -1);
+            let mut out = std::ptr::dangling_mut();
+            assert!(!sdrfox_open_id(std::ptr::null(), &raw mut out).is_null());
+            assert!(out.is_null());
+        }
     }
 
     #[test]

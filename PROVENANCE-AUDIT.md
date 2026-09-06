@@ -66,3 +66,11 @@ If a future review finds a provenance concern, report it privately according
 to [`SECURITY.md`](SECURITY.md), preserve the evidence outside the repository,
 and remediate it in a new commit without importing the questioned source or
 its history.
+
+## 2026-09-06 macOS integration
+
+Added C ABI capabilities and exact receiver selection independently against
+this canonical clean source. The narrowly patched nusb 0.2.7 Cargo source is
+permissive (Apache-2.0 OR MIT), with its immutable archive and full license
+texts recorded in docs/MACOS_USB.md and vendor/nusb. No GPL or legacy source
+was read. Physical control-OUT repair remains unverified without receivers.

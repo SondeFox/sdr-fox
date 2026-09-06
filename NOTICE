@@ -108,3 +108,10 @@ there, which an unprivileged Android process cannot do regardless.)
 
 Third-party Rust crates are listed in Cargo.toml with their own licences;
 see `cargo license` or Cargo.lock for the resolved set.
+
+macOS USB source update (2026-09-06): nusb 0.2.7 is vendored under vendor/nusb
+from the published crates.io archive, with an isolated synchronous IOKit
+control-OUT candidate repair. Copyright Kevin Mehall and contributors;
+Apache-2.0 OR MIT, license texts retained there. Exact archive and modification
+scope are in docs/MACOS_USB.md. macOS and Android exclude rusb/libusb entirely;
+the historical desktop libusb notices now apply only to Linux/Windows fallback.

@@ -28,7 +28,7 @@ libc = "0.2"
 # feature-based attempt at this failed earlier because downstream crates
 # re-enabled the dependency through unification. Target tables are evaluated
 # per-target and cannot be unified back on.
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "macos")))'.dependencies]
 rusb.workspace = true
 # Direct libusb-1.0 FFI for the desktop rusb async transfer ring. Pinned to the
 # same version rusb resolves to (see Cargo.lock) so we share one copy of the

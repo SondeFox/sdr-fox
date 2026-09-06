@@ -24,10 +24,10 @@ Python, Android JNI, and command-line interfaces.
 
 ## Transport behavior
 
-The desktop build includes both `nusb` and `rusb` transports. Linux and
-Windows prefer the pure-Rust `nusb` backend and can fall back to `rusb`;
-macOS prefers `rusb`/libusb because the IOKit path has stalled RTL2832U
-control-OUT transfers in hardware testing.
+macOS uses the pure-Rust nusb backend with an isolated synchronous IOKit
+control-OUT candidate repair. It excludes rusb/libusb from the resolved graph.
+Linux and Windows prefer nusb and retain their rusb fallback. Physical macOS
+validation remains required; see `docs/MACOS_USB.md`.
 
 Android is different: the app obtains a USB file descriptor after the user
 grants permission, and the JNI layer enters `nusb` through that descriptor.
@@ -113,3 +113,19 @@ libusb distribution notes are in [`NOTICE`](NOTICE).
 
 Repository access is private during incubation. Making the project public is
 a separate approval, not an implication of the license files being present.
+
+## macOS direct USB update (2026-09-06)
+
+macOS now resolves nusb only; rusb and libusb1-sys are target-excluded just as
+on Android. Linux/Windows retain their existing fallback. The pinned nusb
+0.2.7 source under `vendor/nusb` changes macOS control OUT to synchronous
+IOKit `DeviceRequestTO`, retaining request/payload ownership and checking
+completion length, while leaving bulk and IN event loops intact. This is a
+candidate repair for the previously documented asynchronous OUT stall, with
+mock request tests; **no attached RTL-SDR or Airspy was available to reproduce
+the original failure or validate the repair on hardware**. See
+`docs/MACOS_USB.md` for exact validation and provenance.
+
+The C ABI adds stable receiver enumeration/open, applied rate, queried sample
+rates/gains, stage controls, IF bandwidth and reference oscillator access.
+Existing integer selectors and original-format stream reads remain compatible.

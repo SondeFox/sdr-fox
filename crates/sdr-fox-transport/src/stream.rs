@@ -194,6 +194,7 @@ impl<T> RetainOnDrop<T> {
     /// to non-Android so the Android build (which has no libusb modules) does
     /// not flag it dead.
     #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "macos")))]
     pub(crate) fn value(&self) -> &T {
         self.value
             .as_ref()

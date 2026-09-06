@@ -2,12 +2,10 @@
 //!
 //! USB transport abstraction for sdr-fox with four implementations:
 //!
-//! - [`RusbTransport`] — libusb-backed (`rusb`). **macOS desktop default**
-//!   (nusb's IOKit backend stalls RTL2832U control-OUT transfers; libusb
-//!   works, as `rtl_test` confirms). Reliable cross-platform fallback.
-//!   Desktop only: not compiled for Android (see `NusbFdTransport`).
-//! - [`NusbTransport`] — pure-Rust (`nusb`). Default on Linux/Windows
-//!   (no libusb dylib). Works for control-IN but stalls control-OUT on macOS.
+//! - `RusbTransport` — Linux/Windows-only fallback; never compiled on macOS
+//!   or Android.
+//! - [`NusbTransport`] — pure-Rust USB on macOS/Linux/Windows. macOS uses
+//!   the reviewed control-OUT patch described in docs/MACOS_USB.md.
 //! - `NusbFdTransport` — pure-Rust (`nusb`) over an Android-injected fd.
 //!   The only transport compiled for Android. Uses `nusb::Device::from_fd`,
 //!   so the Android `.so` contains no libusb code.
@@ -19,8 +17,7 @@
 //!
 //! ## Which backend opens what
 //!
-//! [`open_default`] picks the right backend for the platform: `rusb` on macOS,
-//! `nusb` elsewhere. Driver crates should call `open_default` rather than
+//! [`open_default`] picks the right backend for the platform: `nusb` on macOS, with a rusb fallback on Linux/Windows. Driver crates should call `open_default` rather than
 //! hard-coding a backend. Android does not enumerate the bus and reaches the
 //! device through `NusbFdTransport` instead.
 
@@ -52,9 +49,9 @@ pub mod nusb_backend;
 // libusb. See docs/LIBUSB-REMOVAL-PLAN.md.
 #[cfg(target_os = "android")]
 pub mod nusb_fd;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub mod rusb_async;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub mod rusb_backend;
 pub mod stream;
 
@@ -62,9 +59,9 @@ pub use mock::{MockTransport, RecordedRequest, ScriptedReply};
 pub use nusb_backend::NusbTransport;
 #[cfg(target_os = "android")]
 pub use nusb_fd::NusbFdTransport;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub use rusb_async::RusbAsyncSource;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub use rusb_backend::{RusbBufferSource, RusbTransport};
 pub use stream::{
     convert_cu8_block, start_stream, BufferSource, Stream, StreamControl, StreamStats,
@@ -167,9 +164,7 @@ pub fn enumerate_usb_devices() -> Result<Vec<UsbDeviceLocation>, sdr_fox_core::S
 /// Open the platform-default transport for the `index`-th device matching
 /// `(vendor_id, product_id)`.
 ///
-/// On macOS this uses [`RusbTransport`] (libusb) because nusb's IOKit backend
-/// stalls RTL2832U control-OUT transfers; elsewhere it uses [`NusbTransport`]
-/// (pure-Rust, no libusb dylib). Falls back to the other backend on failure.
+/// macOS uses only [`NusbTransport`]; Linux/Windows retain the rusb fallback.
 ///
 /// Not meaningful on Android: an unprivileged Android process cannot enumerate
 /// the USB bus, so a device is never opened by VID/PID/index. The Android path
@@ -186,15 +181,9 @@ pub fn open_default(
     product_id: u16,
     index: usize,
 ) -> Result<Box<dyn sdr_fox_core::Transport>, sdr_fox_core::SdrError> {
-    // macOS: prefer rusb (libusb) — nusb stalls RTL2832U control-OUTs here.
+    // macOS: permissive nusb only, including its reviewed control-OUT patch.
     #[cfg(target_os = "macos")]
     {
-        match RusbTransport::open(vendor_id, product_id, index) {
-            Ok(t) => return Ok(Box::new(t)),
-            Err(e) => {
-                tracing::debug!("rusb open failed, falling back to nusb: {e}");
-            }
-        }
         NusbTransport::open(vendor_id, product_id, index)
             .map(|t| Box::new(t) as Box<dyn sdr_fox_core::Transport>)
     }
@@ -210,6 +199,84 @@ pub fn open_default(
         RusbTransport::open(vendor_id, product_id, index)
             .map(|t| Box::new(t) as Box<dyn sdr_fox_core::Transport>)
     }
+}
+
+/// Stable identity for exact selection. macOS uses the USB topology location
+/// plus the serial when present; unplug/replug at the same port preserves it.
+/// Moving an unnumbered receiver requires deliberate reselection.
+#[cfg(not(target_os = "android"))]
+fn stable_usb_id(info: &nusb::DeviceInfo) -> String {
+    use std::fmt::Write;
+    #[cfg(target_os = "macos")]
+    let location = format!("{:08x}", info.location_id());
+    #[cfg(not(target_os = "macos"))]
+    let location = format!("{}-{}", info.bus_id(), info.device_address());
+    let mut serial = String::new();
+    for b in info.serial_number().unwrap_or("").bytes() {
+        let _ = write!(serial, "{b:02x}");
+    }
+    format!(
+        "usb:{:04x}:{:04x}:{location}:{serial}",
+        info.vendor_id(),
+        info.product_id()
+    )
+}
+
+/// Enumerate stable identifiers paired with lightweight USB metadata.
+#[cfg(not(target_os = "android"))]
+pub fn enumerate_stable_usb_devices(
+) -> Result<Vec<(String, UsbDeviceLocation)>, sdr_fox_core::SdrError> {
+    use nusb::MaybeFuture;
+    let devices = nusb::list_devices()
+        .wait()
+        .map_err(|e| sdr_fox_core::SdrError::Transport(format!("nusb list: {e}")))?;
+    let mut counts = std::collections::HashMap::new();
+    Ok(devices
+        .map(|d| {
+            (
+                stable_usb_id(&d),
+                location_for_device(
+                    d.vendor_id(),
+                    d.product_id(),
+                    d.manufacturer_string(),
+                    d.product_string(),
+                    d.serial_number(),
+                    &mut counts,
+                ),
+            )
+        })
+        .collect())
+}
+
+/// Open the exact current native USB object matching an opaque stable ID.
+/// Duplicate identities and disappeared devices fail closed. No index fallback.
+#[cfg(not(target_os = "android"))]
+pub fn open_stable_usb(
+    id: &str,
+) -> Result<(UsbDeviceLocation, Box<dyn sdr_fox_core::Transport>), sdr_fox_core::SdrError> {
+    use nusb::MaybeFuture;
+    let mut matches = nusb::list_devices()
+        .wait()
+        .map_err(|e| sdr_fox_core::SdrError::Transport(format!("nusb list: {e}")))?
+        .filter(|d| stable_usb_id(d) == id);
+    let info = matches.next().ok_or_else(|| {
+        sdr_fox_core::SdrError::DeviceNotFound("selected receiver disconnected".into())
+    })?;
+    if matches.next().is_some() {
+        return Err(sdr_fox_core::SdrError::DeviceNotFound(
+            "receiver identity is ambiguous".into(),
+        ));
+    }
+    let location = location_for_device(
+        info.vendor_id(),
+        info.product_id(),
+        info.manufacturer_string(),
+        info.product_string(),
+        info.serial_number(),
+        &mut std::collections::HashMap::new(),
+    );
+    let transport = NusbTransport::open_info(&info)?;
+    Ok((location, Box::new(transport)))
 }
 
 #[cfg(test)]

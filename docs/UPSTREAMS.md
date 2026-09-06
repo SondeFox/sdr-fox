@@ -45,3 +45,19 @@ Before using a new reference or upstream version:
 When uncertain, stop before importing material and ask the repository owner.
 Preserve detailed comparison evidence outside Git; only a sanitized conclusion
 belongs in this repository.
+
+## macOS direct USB update (2026-09-06)
+
+macOS now resolves nusb only; rusb and libusb1-sys are target-excluded just as
+on Android. Linux/Windows retain their existing fallback. The pinned nusb
+0.2.7 source under `vendor/nusb` changes macOS control OUT to synchronous
+IOKit `DeviceRequestTO`, retaining request/payload ownership and checking
+completion length, while leaving bulk and IN event loops intact. This is a
+candidate repair for the previously documented asynchronous OUT stall, with
+mock request tests; **no attached RTL-SDR or Airspy was available to reproduce
+the original failure or validate the repair on hardware**. See
+`docs/MACOS_USB.md` for exact validation and provenance.
+
+The C ABI adds stable receiver enumeration/open, applied rate, queried sample
+rates/gains, stage controls, IF bandwidth and reference oscillator access.
+Existing integer selectors and original-format stream reads remain compatible.
