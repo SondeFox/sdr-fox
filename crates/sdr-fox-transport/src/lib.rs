@@ -5,7 +5,7 @@
 //! - `RusbTransport` — Linux/Windows-only fallback; never compiled on macOS
 //!   or Android.
 //! - [`NusbTransport`] — pure-Rust USB on macOS/Linux/Windows. macOS uses
-//!   the reviewed control-OUT patch described in docs/MACOS_USB.md.
+//!   the reviewed control-OUT patch described in `docs/MACOS_USB.md`.
 //! - `NusbFdTransport` — pure-Rust (`nusb`) over an Android-injected fd.
 //!   The only transport compiled for Android. Uses `nusb::Device::from_fd`,
 //!   so the Android `.so` contains no libusb code.
