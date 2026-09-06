@@ -619,6 +619,16 @@ impl R82xx {
         }
     }
 
+    /// RTL-SDR Blog V4 uses a shared 28.8 MHz oscillator for its R828D
+    /// tuner and RTL2832U (manufacturer's published 2023 design description).
+    /// Ordinary R828D receivers retain the 16 MHz default in `new`.
+    #[must_use]
+    pub fn for_blog_v4() -> Self {
+        let mut tuner = Self::new(TunerKind::R828D);
+        tuner.xtal_hz = R82XX_XTAL_R820T_HZ;
+        tuner
+    }
+
     /// The reference clock this instance was constructed with, in Hz.
     #[must_use]
     pub fn xtal_hz(&self) -> u32 {
@@ -884,6 +894,12 @@ mod tests {
         shadow.write_reg_mask(&mut bus, 0x1d, 0x03, 0x03).unwrap();
         assert_eq!(bus.attempts, vec![(0x1d, vec![expected]); 2]);
         assert_eq!(shadow.get(0x1d), expected);
+    }
+
+    #[test]
+    fn blog_v4_uses_shared_28m8_reference_without_changing_generic_r828d() {
+        assert_eq!(R82xx::for_blog_v4().xtal_hz(), 28_800_000);
+        assert_eq!(R82xx::new(TunerKind::R828D).xtal_hz(), 16_000_000);
     }
 
     #[test]

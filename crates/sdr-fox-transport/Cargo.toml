@@ -19,7 +19,7 @@ thiserror.workspace = true
 tracing.workspace = true
 libc = "0.2"
 
-# Desktop libusb backends. These MUST NOT compile for Android: the Android
+# Linux/Windows libusb backends. These MUST NOT compile for macOS or Android: the Android
 # transport (`nusb_fd`) uses nusb's `from_fd` entry point, and keeping libusb
 # out of the Android build is the boundary documented in
 # docs/LIBUSB-REMOVAL-PLAN.md.

@@ -5,7 +5,7 @@
 //! - `RusbTransport` — Linux/Windows-only fallback; never compiled on macOS
 //!   or Android.
 //! - [`NusbTransport`] — pure-Rust USB on macOS/Linux/Windows. macOS uses
-//!   the reviewed control-OUT patch described in `docs/MACOS_USB.md`.
+//!   the published, unmodified nusb 0.2.7 IOKit path.
 //! - `NusbFdTransport` — pure-Rust (`nusb`) over an Android-injected fd.
 //!   The only transport compiled for Android. Uses `nusb::Device::from_fd`,
 //!   so the Android `.so` contains no libusb code.
@@ -181,7 +181,7 @@ pub fn open_default(
     product_id: u16,
     index: usize,
 ) -> Result<Box<dyn sdr_fox_core::Transport>, sdr_fox_core::SdrError> {
-    // macOS: permissive nusb only, including its reviewed control-OUT patch.
+    // macOS: published nusb only; no libusb fallback enters this target.
     #[cfg(target_os = "macos")]
     {
         NusbTransport::open(vendor_id, product_id, index)

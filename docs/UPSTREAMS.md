@@ -48,15 +48,20 @@ belongs in this repository.
 
 ## macOS direct USB update (2026-09-06)
 
-macOS now resolves nusb only; rusb and libusb1-sys are target-excluded just as
-on Android. Linux/Windows retain their existing fallback. The pinned nusb
-0.2.7 source under `vendor/nusb` changes macOS control OUT to synchronous
-IOKit `DeviceRequestTO`, retaining request/payload ownership and checking
-completion length, while leaving bulk and IN event loops intact. This is a
-candidate repair for the previously documented asynchronous OUT stall, with
-mock request tests; **no attached RTL-SDR or Airspy was available to reproduce
-the original failure or validate the repair on hardware**. See
-`docs/MACOS_USB.md` for exact validation and provenance.
+macOS now resolves the published, unmodified nusb 0.2.7 only; rusb and
+libusb1-sys are target-excluded just as on Android. Linux/Windows retain their
+existing fallback. Controlled physical comparison found no historical
+control-OUT stall on this host with the attached RTL-SDR and Airspy receivers;
+a speculative synchronous IOKit workaround was therefore removed before
+adoption. No nusb source is vendored or patched in the final tree.
+
+Physical testing did reveal a distinct Blog V4 PLL failure: the generic
+R828D default clock is 16 MHz, while the manufacturer documents 28.8 MHz for
+its V4 board. Strict VID/PID plus published manufacturer/product identity now
+selects that board's clock; generic R828D keeps 16 MHz. The V4 then locked and
+streamed. This is a clock/transport result, not calibrated RF sensitivity or
+whole-radio feature acceptance. Sources and test scope are in
+`docs/MACOS_USB.md`.
 
 The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.

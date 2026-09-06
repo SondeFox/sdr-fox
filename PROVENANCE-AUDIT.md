@@ -69,8 +69,14 @@ its history.
 
 ## 2026-09-06 macOS integration
 
-Added C ABI capabilities and exact receiver selection independently against
-this canonical clean source. The narrowly patched nusb 0.2.7 Cargo source is
-permissive (Apache-2.0 OR MIT), with its immutable archive and full license
-texts recorded in docs/MACOS_USB.md and vendor/nusb. No GPL or legacy source
-was read. Physical control-OUT repair remains unverified without receivers.
+The C API extensions and Mac transport selection are independently written
+against canonical clean source. Final macOS uses unmodified nusb 0.2.7 with
+rusb/libusb target-excluded. A candidate vendor workaround was removed after
+physical comparison failed to reproduce the historic async OUT fault.
+
+The Blog V4 tuner clock correction uses the manufacturer's published design
+and device identification instructions, linked in docs/MACOS_USB.md. No GPL
+source implementation or quarantined legacy source was consulted for it.
+Generic R828D behavior remains at the prior 16 MHz reference. Physical tests
+established that the V4 changed from PLL failure to IQ streaming at UHF; RF
+sensitivity and complete V4 switched-filter/HF support are not established.

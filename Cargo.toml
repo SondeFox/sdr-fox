@@ -38,7 +38,7 @@ sdr-fox-airspy = { path = "crates/sdr-fox-airspy", version = "0.1.0" }
 sdr-fox-dsp = { path = "crates/sdr-fox-dsp", version = "0.1.0" }
 
 # External — USB
-nusb = "0.2"
+nusb = "=0.2.7"
 rusb = "0.9"
 
 # External — async / channels / errors / logging
@@ -73,7 +73,3 @@ strip = "symbols"
 # Keep debug symbols in the bench profile so flamegraphs are useful.
 [profile.bench]
 debug = true
-
-# Reviewed nusb 0.2.7 with an isolated macOS control-OUT fix.
-[patch.crates-io]
-nusb = { path = "vendor/nusb" }

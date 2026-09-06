@@ -41,8 +41,8 @@ upconverter offset is applied. `start_stream` returns a `Box<dyn StreamSink>`
 
 ### `Transport` (the USB I/O)
 `control_in/out`, `bulk_read`, `start_bulk_stream`. Four impls:
-- `NusbTransport` — pure-Rust Linux/Windows desktop path (nusb, no libusb).
-- `RusbTransport` — device-local libusb context, including the macOS default.
+- `NusbTransport` — pure-Rust macOS/Linux/Windows USB (nusb).
+- `RusbTransport` — Linux/Windows device-local libusb fallback.
 - `MockTransport` — records requests, replays scripted replies. **The test
   backbone** for every driver crate.
 - `NusbFdTransport` — Android fd-injection path. Enters nusb through
@@ -67,7 +67,7 @@ tests) so they're unit-testable without a transport. One module per chip.
 | Airspy Mini 2× real-sample decimation | `sdr-fox-airspy/src/iq_synth.rs` |
 | Caller-owned direct buffers with no native JVM upcalls | `sdr-fox-jni/src/jni_impl.rs` |
 | Panic containment at the C boundary | `sdr-fox-cabi/src/lib.rs` (`catch_unwind`) |
-| nusb on Linux/Windows/Android; rusb fallback and macOS default | `sdr-fox-transport/src/lib.rs` |
+| nusb on macOS/Android; Linux/Windows retain rusb fallback | `sdr-fox-transport/src/lib.rs` |
 
 ## Performance characteristics (measured)
 
@@ -92,22 +92,26 @@ The E4000 is zero-IF: the demod runs with IF = 0, no spectrum inversion, and
 both ADC inputs, unlike the R82xx low-IF path. FC0012/FC0013/FC2580 tuners and
 Blog V4 detection are trait-wired but not implemented; a probe that finds one
 of those chips — or no tuner at all — fails the open with
-`TunerError::NoSupportedTuner` rather than a misleading PLL error. macOS
-defaults to a device-local rusb context because nusb control-OUT can stall on
-live RTL-SDR hardware. USB teardown, Android fd streaming, and throughput have
+`TunerError::NoSupportedTuner` rather than a misleading PLL error. macOS now uses the unmodified nusb backend; the historical control-OUT
+fault was not reproduced on the current physical receivers/host. USB teardown, Android fd streaming, and throughput have
 mock coverage but still require physical-device release gates.
 
 ## macOS direct USB update (2026-09-06)
 
-macOS now resolves nusb only; rusb and libusb1-sys are target-excluded just as
-on Android. Linux/Windows retain their existing fallback. The pinned nusb
-0.2.7 source under `vendor/nusb` changes macOS control OUT to synchronous
-IOKit `DeviceRequestTO`, retaining request/payload ownership and checking
-completion length, while leaving bulk and IN event loops intact. This is a
-candidate repair for the previously documented asynchronous OUT stall, with
-mock request tests; **no attached RTL-SDR or Airspy was available to reproduce
-the original failure or validate the repair on hardware**. See
-`docs/MACOS_USB.md` for exact validation and provenance.
+macOS now resolves the published, unmodified nusb 0.2.7 only; rusb and
+libusb1-sys are target-excluded just as on Android. Linux/Windows retain their
+existing fallback. Controlled physical comparison found no historical
+control-OUT stall on this host with the attached RTL-SDR and Airspy receivers;
+a speculative synchronous IOKit workaround was therefore removed before
+adoption. No nusb source is vendored or patched in the final tree.
+
+Physical testing did reveal a distinct Blog V4 PLL failure: the generic
+R828D default clock is 16 MHz, while the manufacturer documents 28.8 MHz for
+its V4 board. Strict VID/PID plus published manufacturer/product identity now
+selects that board's clock; generic R828D keeps 16 MHz. The V4 then locked and
+streamed. This is a clock/transport result, not calibrated RF sensitivity or
+whole-radio feature acceptance. Sources and test scope are in
+`docs/MACOS_USB.md`.
 
 The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.
