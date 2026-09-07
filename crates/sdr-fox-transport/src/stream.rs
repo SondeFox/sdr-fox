@@ -1231,6 +1231,36 @@ mod tests {
     }
 
     #[test]
+    fn large_transfer_queue_budget_counts_actual_bytes_without_blocking() {
+        for bytes in [65_536usize, 131_072, 262_144] {
+            let depth = 2_097_152 / bytes;
+            // Fill the whole payload budget, then drop two known full blocks
+            // and one short block. Park rather than introducing a terminal
+            // error, so every reported loss is the deliberate queue overflow.
+            let mut script = vec![ScriptStep::Deliver(vec![0; bytes]); depth + 2];
+            script.push(ScriptStep::Deliver(vec![0; 514]));
+            script.push(ScriptStep::ParkUntilStop);
+            let mut stream =
+                start_stream_concrete(ScriptedRecoverySource::new(script), depth, None);
+            wait_until(|| stream.stats().dropped_blocks == 3);
+            let stats = stream.stats();
+            assert_eq!(stats.high_water_mark as usize * bytes, 2_097_152);
+            assert_eq!(stats.sample_pairs_dropped_estimate, (bytes + 257) as u64);
+            assert_eq!(stats.failed_transfers, 0);
+            assert_eq!(stats.hardware_overruns_unknown, 0);
+            for sequence in 0..depth {
+                let block = stream.recv().unwrap().unwrap();
+                assert_eq!(block.sequence, sequence as u64);
+                assert_eq!(block.samples.complex_count(), bytes / 2);
+            }
+            assert_eq!(stream.stats().bytes_delivered, 2_097_152);
+            let start = Instant::now();
+            drop(stream);
+            assert!(start.elapsed() < Duration::from_secs(1));
+        }
+    }
+
+    #[test]
     fn typed_overflow_counts_exact_samples_and_is_reported() {
         let source = OneThenOverflow { first: true };
         let mut handle = start_stream_concrete(source, 2, None);

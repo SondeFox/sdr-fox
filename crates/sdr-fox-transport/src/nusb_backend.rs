@@ -51,6 +51,34 @@ pub struct NusbTransport {
 }
 
 impl NusbTransport {
+    /// Start the ordinary stream with an opt-in diagnostic observer before
+    /// bounded delivery. The callback sees each successful USB payload's
+    /// actual length, including payloads subsequently dropped by the queue.
+    /// It must be brief and nonblocking; it runs on the USB worker. Ordinary
+    /// application streams do not install or execute this observer.
+    ///
+    /// # Errors
+    /// Returns the same configuration, ownership, and USB errors as streaming.
+    pub fn start_bulk_stream_observed(
+        &mut self,
+        endpoint: u8,
+        buffer_count: usize,
+        buffer_size: usize,
+        queue_depth: usize,
+        observe: impl FnMut(usize) + Send + 'static,
+    ) -> Result<crate::stream::Stream, SdrError> {
+        validate_stream_config(buffer_count, buffer_size, queue_depth)?;
+        let lease = StreamLease::acquire(&self.stream_busy)?;
+        let source =
+            NusbBufferSource::new(self.iface.clone(), endpoint, buffer_size, buffer_count)?
+                .with_stream_lease(lease);
+        Ok(crate::stream::start_stream_concrete(
+            ObservedSource { source, observe },
+            queue_depth,
+            None,
+        ))
+    }
+
     /// Wrap an already-opened, claimed `nusb` interface.
     #[must_use]
     pub fn from_interface(iface: Interface) -> Self {
@@ -120,6 +148,29 @@ impl NusbTransport {
             DeviceRecipient::Endpoint => Recipient::Endpoint,
             DeviceRecipient::Other => Recipient::Other,
         }
+    }
+}
+
+struct ObservedSource<F> {
+    source: NusbBufferSource,
+    observe: F,
+}
+
+impl<F: FnMut(usize) + Send + 'static> BufferSource for ObservedSource<F> {
+    fn next_buffer(&mut self) -> Result<Vec<u8>, SdrError> {
+        let result = self.source.next_buffer();
+        if let Ok(bytes) = &result {
+            (self.observe)(bytes.len());
+        }
+        result
+    }
+
+    fn set_stop(&mut self, stop: Arc<AtomicBool>) {
+        self.source.set_stop(stop);
+    }
+
+    fn suppress_error_accounting(&mut self) -> bool {
+        self.source.suppress_error_accounting()
     }
 }
 

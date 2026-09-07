@@ -30,12 +30,20 @@ use std::time::{Duration, Instant};
 
 use sdr_fox_airspy::AirspyBackend;
 use sdr_fox_core::{
-    DeviceDescriptor, DeviceKind, GainRequest, IqFormat, SdrBackend, SdrDevice, StreamConfig,
-    Upconverter,
+    DeviceDescriptor, DeviceKind, GainRequest, IqFormat, SdrBackend, SdrDevice, Upconverter,
 };
 use sdr_fox_rtlsdr::RtlSdrBackend;
 
 use crossbeam_channel::{Receiver, Sender};
+#[cfg(test)]
+use sdr_fox_core::StreamConfig;
+
+mod transfer_policy;
+#[cfg(feature = "transfer-probe")]
+#[doc(hidden)]
+pub mod transfer_probe;
+#[cfg(test)]
+mod transfer_tests;
 
 #[cfg(test)]
 const STOP_POLL: Duration = Duration::from_millis(10);
@@ -139,7 +147,12 @@ impl ReadGate {
 }
 
 impl SdrFoxStream {
-    fn new(mut stream: sdr_fox_core::StreamHandle, bridge: bool) -> Self {
+    fn with_bridge_depth(
+        mut stream: sdr_fox_core::StreamHandle,
+        bridge: bool,
+        bridge_depth: usize,
+    ) -> Self {
+        assert!(bridge_depth > 0);
         let stopped = Arc::new(AtomicBool::new(false));
         let stop_handle = stream.stop_handle();
         let (stop_sender, stop_receiver) = crossbeam_channel::bounded::<()>(0);
@@ -148,7 +161,7 @@ impl SdrFoxStream {
             // Airspy synthesis currently runs in StreamSink::recv. Keep a
             // bounded worker so synthesis overlaps the C consumer copy, but
             // use event-driven select rather than a blind full-queue sleep.
-            let (sender, receiver) = crossbeam_channel::bounded(BRIDGE_DEPTH);
+            let (sender, receiver) = crossbeam_channel::bounded(bridge_depth);
             let worker_stop = stop_receiver.clone();
             let worker_stopped = Arc::clone(&stopped);
             let worker = thread::spawn(move || {
@@ -947,21 +960,20 @@ pub unsafe extern "C" fn sdrfox_start_stream(
     };
     ffi_safe(
         move || {
-            let cfg = StreamConfig {
-                format: format.into(),
-                ..StreamConfig::default()
-            };
             let Ok(mut device) = dev.device.lock() else {
                 return -1;
             };
             let bridge = matches!(device.info().kind, DeviceKind::Airspy);
+            let policy = transfer_policy::production_policy(bridge);
+            let cfg = policy.config(format.into());
             let started = device.start_stream(cfg);
             drop(device);
             match started {
                 Ok(stream) => {
                     // Thread creation and adapter setup happen outside the
                     // process-wide registry lock.
-                    let entry = SdrFoxStream::new(stream, bridge);
+                    let entry =
+                        SdrFoxStream::with_bridge_depth(stream, bridge, policy.bridge_blocks);
                     match streams().write().ok().and_then(|mut r| r.insert(entry)) {
                         Some(handle) => {
                             *out = handle;
@@ -1375,6 +1387,10 @@ mod tests {
     }
 
     fn test_stream_mode(bridge: bool) -> TestStreamParts {
+        test_stream_depth(bridge, BRIDGE_DEPTH)
+    }
+
+    pub(super) fn test_stream_depth(bridge: bool, depth: usize) -> TestStreamParts {
         let (sender, receiver) = mpsc::channel();
         let stopped = Arc::new(AtomicBool::new(false));
         let finished = Arc::new(AtomicBool::new(false));
@@ -1385,7 +1401,7 @@ mod tests {
             finished: Arc::clone(&finished),
             delivered_blocks: Arc::clone(&delivered_blocks),
         };
-        let stream = SdrFoxStream::new(Box::new(sink), bridge);
+        let stream = SdrFoxStream::with_bridge_depth(Box::new(sink), bridge, depth);
         let handle = streams().write().unwrap().insert(stream).unwrap();
         (handle, sender, stopped, finished, delivered_blocks)
     }
