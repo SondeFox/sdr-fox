@@ -155,6 +155,27 @@ fn sliding_dot_x16(taps: &[f32], win: &[f32]) -> [f32; 16] {
     out
 }
 
+/// Default 24-coefficient filter with a fixed window extent. The fixed bounds
+/// let the compiler remove the four checked slices from every tap quad. Each
+/// lane retains the dynamic kernel's four non-fused chains and reduction tree.
+#[inline]
+fn sliding_dot_24_x16(taps: &[f32; 24], win: &[f32; 39]) -> [f32; 16] {
+    let mut acc = [[0.0f32; 16]; 4];
+    for k in (0..24).step_by(4) {
+        for c in 0..4 {
+            let g = taps[k + c];
+            for lane in 0..16 {
+                acc[c][lane] += g * win[k + c + lane];
+            }
+        }
+    }
+    let mut out = [0.0f32; 16];
+    for lane in 0..16 {
+        out[lane] = (acc[0][lane] + acc[1][lane]) + (acc[2][lane] + acc[3][lane]);
+    }
+    out
+}
+
 /// Scalar mirror of one `sliding_dot_x16` lane: the same four chains keyed by
 /// tap index mod 4 and the same reduction tree, hence bit-identical results.
 ///
@@ -508,14 +529,21 @@ impl IqSynthesizer {
         // block's first output into the delay/poly scratch frames below.
         let phi = self.mixer_phase & 1;
 
-        self.poly_scratch.clear();
+        let even_count = usize::midpoint(complete, usize::from(phi == 0));
+        let odd_count = complete - even_count;
+        let (poly_count, delay_count) = if self.mid_odd {
+            (even_count, odd_count)
+        } else {
+            (odd_count, even_count)
+        };
+        // Keep initialized storage between calls. Routing overwrites exactly
+        // these spans, with no per-sample Vec length/capacity bookkeeping.
         self.poly_scratch
-            .reserve(self.poly_carry.len() + complete / 2 + 2);
-        self.poly_scratch.extend_from_slice(&self.poly_carry);
-        self.delay_scratch.clear();
+            .resize(self.poly_carry.len() + poly_count, 0.0);
+        self.poly_scratch[..self.poly_carry.len()].copy_from_slice(&self.poly_carry);
         self.delay_scratch
-            .reserve(self.delay_carry.len() + complete / 2 + 2);
-        self.delay_scratch.extend_from_slice(&self.delay_carry);
+            .resize(self.delay_carry.len() + delay_count, 0.0);
+        self.delay_scratch[..self.delay_carry.len()].copy_from_slice(&self.delay_carry);
 
         // ---- decode containers, DC-block, fold mixer signs, split by parity.
         let mut pending_head: Option<u16> = None;
@@ -557,84 +585,75 @@ impl IqSynthesizer {
 
     /// Decode 16-bit containers from `body` (preceded by an optional
     /// already-assembled container), DC-block each sample, fold the
-    /// conjugated fs/4 mixer sign in, and append to the parity-split
-    /// streams. A trailing odd byte is retained for the next call.
+    /// conjugated fs/4 mixer sign in, and fill the prepared parity-split
+    /// spans. A trailing odd byte is retained for the next call.
     fn route_containers<const FUSED: bool>(&mut self, pending_head: Option<u16>, body: &[u8]) {
-        let mut chunks = body.chunks_exact(2);
-        // Hoist the loop-carried state into locals: routed through `self` the
-        // per-sample load/store traffic costs ~40% of the whole kernel.
         let mut dc = self.dc_average;
         let mut phase = self.mixer_phase;
         let mid_odd = self.mid_odd;
-        {
-            let (poly_scratch, delay_scratch) = (&mut self.poly_scratch, &mut self.delay_scratch);
-            let route_single = |v: u16,
-                                phase: &mut usize,
-                                dc: &mut f32,
-                                poly: &mut Vec<f32>,
-                                delay: &mut Vec<f32>| {
-                let folded = MIXER_SIGN[*phase] * decode_dc::<FUSED>(v, dc);
-                // Even-parity samples feed the polyphase stream when `mid` is
-                // odd, the delay stream when it is even.
-                let is_even_parity = *phase & 1 == 0;
-                if is_even_parity == mid_odd {
-                    poly.push(folded);
-                } else {
-                    delay.push(folded);
-                }
-                *phase = (*phase + 1) & 3;
-            };
-            if let Some(v) = pending_head {
-                route_single(v, &mut phase, &mut dc, poly_scratch, delay_scratch);
+        let mut poly = self.poly_scratch[self.poly_carry.len()..].iter_mut();
+        let mut delay = self.delay_scratch[self.delay_carry.len()..].iter_mut();
+        let route_single = |v: u16,
+                            phase: &mut usize,
+                            dc: &mut f32,
+                            poly: &mut std::slice::IterMut<'_, f32>,
+                            delay: &mut std::slice::IterMut<'_, f32>| {
+            let folded = MIXER_SIGN[*phase] * decode_dc::<FUSED>(v, dc);
+            if (*phase & 1 == 0) == mid_odd {
+                *poly.next().unwrap() = folded;
+            } else {
+                *delay.next().unwrap() = folded;
             }
-            // Align to even parity so the main loop handles full
-            // (even, odd) input pairs.
-            if phase & 1 == 1 {
-                if let Some(chunk) = chunks.next() {
-                    route_single(
-                        u16::from_le_bytes([chunk[0], chunk[1]]) & 0x0fff,
-                        &mut phase,
-                        &mut dc,
-                        poly_scratch,
-                        delay_scratch,
-                    );
-                }
-            }
-            // Phase parity is even here. With the conjugate folded into
-            // MIXER_SIGN, both samples of a pair carry the SAME sign `s`
-            // (+1 at phase 0, -1 at phase 2); `s` itself flips every pair.
-            // Multiplication by ±1.0 is exact, so this is bit-identical to
-            // the sign-table path above.
-            let mut s = MIXER_SIGN[phase];
-            while let Some(c0) = chunks.next() {
-                let x0 = decode_dc::<FUSED>(u16::from_le_bytes([c0[0], c0[1]]) & 0x0fff, &mut dc);
-                let Some(c1) = chunks.next() else {
-                    // Trailing lone even-parity sample.
-                    let folded = s * x0;
-                    if mid_odd {
-                        poly_scratch.push(folded);
-                    } else {
-                        delay_scratch.push(folded);
-                    }
-                    phase = (phase + 1) & 3;
-                    break;
-                };
-                let x1 = decode_dc::<FUSED>(u16::from_le_bytes([c1[0], c1[1]]) & 0x0fff, &mut dc);
-                if mid_odd {
-                    poly_scratch.push(s * x0);
-                    delay_scratch.push(s * x1);
-                } else {
-                    delay_scratch.push(s * x0);
-                    poly_scratch.push(s * x1);
-                }
-                s = -s;
-                phase = (phase + 2) & 3;
-            }
+            *phase = (*phase + 1) & 3;
+        };
+        if let Some(v) = pending_head {
+            route_single(v, &mut phase, &mut dc, &mut poly, &mut delay);
+        }
+        let mut offset = 0;
+        if phase & 1 == 1 && body.len() >= 2 {
+            route_single(
+                u16::from_le_bytes([body[0], body[1]]) & 0x0fff,
+                &mut phase,
+                &mut dc,
+                &mut poly,
+                &mut delay,
+            );
+            offset = 2;
+        }
+        let mut pairs = body[offset..].chunks_exact(4);
+        let mut s = MIXER_SIGN[phase];
+        // Selecting the destinations once makes both filter modes share the
+        // same pair loop without per-sample allocation checks. DC remains
+        // strictly v0 then v1.
+        let (even, odd) = if mid_odd {
+            (poly.into_slice(), delay.into_slice())
+        } else {
+            (delay.into_slice(), poly.into_slice())
+        };
+        let pair_count = pairs.len();
+        let (even_pairs, even_tail) = even.split_at_mut(pair_count);
+        let odd_pairs = &mut odd[..pair_count];
+        for (bytes, (even, odd)) in pairs.by_ref().zip(even_pairs.iter_mut().zip(odd_pairs)) {
+            let x0 = decode_dc::<FUSED>(u16::from_le_bytes([bytes[0], bytes[1]]) & 0x0fff, &mut dc);
+            let x1 = decode_dc::<FUSED>(u16::from_le_bytes([bytes[2], bytes[3]]) & 0x0fff, &mut dc);
+            *even = s * x0;
+            *odd = s * x1;
+            s = -s;
+        }
+        phase = (phase + 2 * (pair_count & 1)) & 3;
+        let remainder = pairs.remainder();
+        if remainder.len() >= 2 {
+            let x = decode_dc::<FUSED>(
+                u16::from_le_bytes([remainder[0], remainder[1]]) & 0x0fff,
+                &mut dc,
+            );
+            even_tail[0] = MIXER_SIGN[phase] * x;
+            phase = (phase + 1) & 3;
         }
         self.dc_average = dc;
         self.mixer_phase = phase;
-        if let Some(&low) = chunks.remainder().first() {
-            self.pending_low_byte = Some(low);
+        if remainder.len() & 1 == 1 {
+            self.pending_low_byte = remainder.last().copied();
         }
     }
 
@@ -658,16 +677,27 @@ impl IqSynthesizer {
         } else {
             (self.delay_scratch.len() - self.delay_carry.len(), phi, 0)
         };
-        self.stage_poly.clear();
+        // Every output below is overwritten. Retain initialized elements on
+        // steady-size calls so resize does not zero the entire stage again.
         self.stage_poly.resize(n_out, 0.0);
         {
             let poly_scratch = &self.poly_scratch[..];
             let stage = &mut self.stage_poly[..];
             let mut t = 0usize;
-            while t + 16 <= n_out {
-                let w = &poly_scratch[t + poly_off..t + poly_off + ncoef + 15];
-                stage[t..t + 16].copy_from_slice(&sliding_dot_x16(taps, w));
-                t += 16;
+            if let Ok(fixed_taps) = <&[f32; 24]>::try_from(taps) {
+                while t + 16 <= n_out {
+                    let w = (&poly_scratch[t + poly_off..t + poly_off + 39])
+                        .try_into()
+                        .unwrap();
+                    stage[t..t + 16].copy_from_slice(&sliding_dot_24_x16(fixed_taps, w));
+                    t += 16;
+                }
+            } else {
+                while t + 16 <= n_out {
+                    let w = &poly_scratch[t + poly_off..t + poly_off + ncoef + 15];
+                    stage[t..t + 16].copy_from_slice(&sliding_dot_x16(taps, w));
+                    t += 16;
+                }
             }
             while t < n_out {
                 let w = &poly_scratch[t + poly_off..t + poly_off + ncoef];
@@ -1252,6 +1282,41 @@ mod tests {
             "mul_add produced bit-identical results to a separate mul+add on \
              every sample; it is not fusing, so FUSED_DC buys nothing"
         );
+    }
+
+    #[test]
+    fn fixed_default_tile_preserves_four_chain_rounding() {
+        let synth = IqSynthesizer::new();
+        let taps: &[f32; 24] = synth.poly_taps_rev.as_slice().try_into().unwrap();
+        let mut window = [0.0f32; 39];
+        // Include signed zeros and subnormals as well as ordinary values;
+        // equality is raw bits, including the scalar ragged-tail path.
+        let values = [
+            0.0,
+            -0.0,
+            f32::from_bits(1),
+            -f32::from_bits(1),
+            f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE,
+            0.125,
+            -0.75,
+            1.0,
+            -1.0,
+        ];
+        for shift in 0..values.len() {
+            for (i, sample) in window.iter_mut().enumerate() {
+                *sample = values[(i + shift) % values.len()];
+            }
+            let got = sliding_dot_24_x16(taps, &window);
+            let dynamic = sliding_dot_x16(taps, &window);
+            for (lane, value) in got.iter().enumerate() {
+                assert_eq!(value.to_bits(), dynamic[lane].to_bits());
+                assert_eq!(
+                    value.to_bits(),
+                    sliding_dot_tail(taps, &window[lane..]).to_bits()
+                );
+            }
+        }
     }
 
     #[test]
