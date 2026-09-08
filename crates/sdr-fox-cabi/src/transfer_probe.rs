@@ -14,6 +14,18 @@ use sdr_fox_transport::{stream::StreamControl, NusbTransport};
 
 use super::transfer_policy::TransferPolicy;
 
+#[derive(Clone, Copy)]
+enum ReceiveMode {
+    Direct,
+    Bridged,
+}
+
+impl ReceiveMode {
+    fn bridged(self) -> bool {
+        matches!(self, Self::Bridged)
+    }
+}
+
 struct Settings {
     policy: TransferPolicy,
     seconds: u64,
@@ -24,6 +36,7 @@ struct Settings {
     lna_agc: bool,
     mixer_agc: bool,
     bias: bool,
+    mode: ReceiveMode,
 }
 
 fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str> {
@@ -46,6 +59,7 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
                     | "--lna-agc"
                     | "--mixer-agc"
                     | "--bias"
+                    | "--bridge"
             ) {
                 return Err(
                     "Unknown option; every RF setting and --exclusive-hardware are required",
@@ -61,8 +75,8 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
             }
         }
     }
-    if !exclusive || values.len() != 10 {
-        return Err("Require --exclusive-hardware and explicit --kib --seconds --frequency --rate --lna --mixer --vga --lna-agc --mixer-agc --bias");
+    if !exclusive || values.len() != 11 {
+        return Err("Require --exclusive-hardware and explicit --kib --seconds --frequency --rate --lna --mixer --vga --lna-agc --mixer-agc --bias --bridge");
     }
     let get = |key: &str| values.get(key).copied().ok_or("Missing required option");
     if get("--rate")? != 10_000_000 {
@@ -103,6 +117,11 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
         lna_agc: flag("--lna-agc")?,
         mixer_agc: flag("--mixer-agc")?,
         bias: flag("--bias")?,
+        mode: if flag("--bridge")? {
+            ReceiveMode::Bridged
+        } else {
+            ReceiveMode::Direct
+        },
     })
 }
 
@@ -291,12 +310,16 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
         .open(&desc, Box::new(transport))
         .map_err(|_| "Airspy initialization failed")?;
     let rate = configure_receiver(device.as_mut(), &config)?;
-    println!("{{\"event\":\"starting\",\"pid\":{},\"family\":\"airspy_one\",\"rate\":{},\"frequency\":{},\"lna\":{},\"mixer\":{},\"vga\":{},\"lna_agc\":{},\"mixer_agc\":{},\"bias\":{},\"raw_bytes\":{},\"inflight\":{},\"raw_queue_blocks\":{},\"bridge_blocks\":{},\"seconds\":{}}}", std::process::id(), rate, config.frequency, config.lna, config.mixer, config.vga, config.lna_agc, config.mixer_agc, config.bias, config.policy.raw_bytes, config.policy.inflight, config.policy.raw_queue_blocks, config.policy.bridge_blocks, config.seconds);
+    println!("{{\"event\":\"starting\",\"pid\":{},\"family\":\"airspy_one\",\"rate\":{},\"frequency\":{},\"lna\":{},\"mixer\":{},\"vga\":{},\"lna_agc\":{},\"mixer_agc\":{},\"bias\":{},\"raw_bytes\":{},\"inflight\":{},\"raw_queue_blocks\":{},\"bridge_enabled\":{},\"bridge_blocks\":{},\"seconds\":{}}}", std::process::id(), rate, config.frequency, config.lna, config.mixer, config.vga, config.lna_agc, config.mixer_agc, config.bias, config.policy.raw_bytes, config.policy.inflight, config.policy.raw_queue_blocks, config.mode.bridged(), if config.mode.bridged() { config.policy.bridge_blocks } else { 0 }, config.seconds);
     let started = Instant::now();
     let stream = device
         .start_stream(config.policy.config(IqFormat::Cf32))
         .map_err(|_| "Start failed")?;
-    let adapter = super::SdrFoxStream::with_bridge_depth(stream, true, config.policy.bridge_blocks);
+    let adapter = super::SdrFoxStream::with_bridge_depth(
+        stream,
+        config.mode.bridged(),
+        config.policy.bridge_blocks,
+    );
     let handle = super::streams()
         .write()
         .map_err(|_| "Registry unavailable")?
@@ -347,7 +370,7 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
     let completion = completion
         .lock()
         .map_err(|_| "Completion stats unavailable")?;
-    println!("{{\"event\":\"complete\",\"elapsed_ns\":{},\"stop_and_join_ns\":{},\"successful_usb_bytes\":{},\"successful_usb_size_histogram\":{},\"histogram_unbucketed\":{},\"usb_arrivals\":{},\"app_read_arrivals\":{},\"read_timeouts_or_eof\":{},\"read_errors\":{},\"short_reads\":{},\"cf32_bytes_read\":{},\"native_blocks_accepted\":{},\"last_sequence\":{},\"last_iq_drop_estimate\":{},\"raw_bytes_delivered\":{},\"raw_pairs_drop_estimate\":{},\"dropped_raw_blocks\":{},\"failed_transfers\":{},\"observed_unknown_overrun_events\":{},\"hardware_loss_counter_available\":false,\"raw_queue_high_water_blocks\":{}}}", receive_elapsed.as_nanos(), stop_ns, completion.bytes, completion.sizes_json(), completion.unbucketed_completions, completion.arrivals.json(started), reads.json(started), timeouts, errors, short_reads, copy.bytes_read, copy.blocks_read, copy.last_sequence, copy.last_dropped, native.bytes_delivered, native.sample_pairs_dropped_estimate, native.dropped_blocks, native.failed_transfers, native.hardware_overruns_unknown, native.high_water_mark);
+    println!("{{\"event\":\"complete\",\"bridge_enabled\":{},\"elapsed_ns\":{},\"stop_and_join_ns\":{},\"successful_usb_bytes\":{},\"successful_usb_size_histogram\":{},\"histogram_unbucketed\":{},\"usb_arrivals\":{},\"app_read_arrivals\":{},\"read_timeouts_or_eof\":{},\"read_errors\":{},\"short_reads\":{},\"cf32_bytes_read\":{},\"native_blocks_accepted\":{},\"last_sequence\":{},\"last_iq_drop_estimate\":{},\"raw_bytes_delivered\":{},\"raw_pairs_drop_estimate\":{},\"dropped_raw_blocks\":{},\"failed_transfers\":{},\"observed_unknown_overrun_events\":{},\"hardware_loss_counter_available\":false,\"raw_queue_high_water_blocks\":{}}}", config.mode.bridged(), receive_elapsed.as_nanos(), stop_ns, completion.bytes, completion.sizes_json(), completion.unbucketed_completions, completion.arrivals.json(started), reads.json(started), timeouts, errors, short_reads, copy.bytes_read, copy.blocks_read, copy.last_sequence, copy.last_dropped, native.bytes_delivered, native.sample_pairs_dropped_estimate, native.dropped_blocks, native.failed_transfers, native.hardware_overruns_unknown, native.high_water_mark);
     if errors > 0 {
         Err("Probe observed read errors")
     } else {
@@ -362,8 +385,28 @@ mod tests {
     #[test]
     fn missing_or_invalid_controls_fail_before_hardware_access() {
         assert!(settings(std::iter::empty()).is_err());
-        let args = "--exclusive-hardware --kib 128 --seconds 30 --frequency 404000000 --rate 10000000 --lna 140 --mixer 150 --vga 150 --lna-agc 0 --mixer-agc 0 --bias 1";
+        let args = "--exclusive-hardware --kib 128 --seconds 30 --frequency 404000000 --rate 10000000 --lna 140 --mixer 150 --vga 150 --lna-agc 0 --mixer-agc 0 --bias 1 --bridge 1";
         assert!(settings(args.split_whitespace().map(str::to_owned)).is_ok());
+        assert!(!settings(
+            args.replace("--bridge 1", "--bridge 0")
+                .split_whitespace()
+                .map(str::to_owned)
+        )
+        .unwrap()
+        .mode
+        .bridged());
+        assert!(settings(
+            args.replace("--bridge 1", "--bridge 2")
+                .split_whitespace()
+                .map(str::to_owned)
+        )
+        .is_err());
+        assert!(settings(
+            args.replace(" --bridge 1", "")
+                .split_whitespace()
+                .map(str::to_owned)
+        )
+        .is_err());
         assert!(settings(
             args.replace("10000000", "2500000")
                 .split_whitespace()

@@ -70,120 +70,192 @@ fn large_raw_and_odd_partitions_preserve_current_synthesis_bits() {
 
 #[test]
 fn app_extent_drains_large_suffixes_with_coherent_metadata_and_errors() {
-    for kib in [64, 128, 256] {
-        let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
-        let (handle, sender, ..) = tests::test_stream_depth(true, policy.bridge_blocks);
-        let values: Vec<f32> = (0..policy.raw_bytes / 2)
-            .map(|n| f32::from_bits(0x3f00_0000 + u32::try_from(n).unwrap()))
-            .collect();
-        for (sequence, dropped) in [(7, 0), (11, 16_384)] {
-            sender
-                .send(Some(Ok(cf32_block(values.clone(), dropped, sequence))))
-                .unwrap();
-        }
-        sender.send(Some(Err(SdrError::Timeout))).unwrap();
-        sender
-            .send(Some(Ok(cf32_block(vec![0.25, -0.5], 16_384, 12))))
-            .unwrap();
-        sender.send(Some(Err(SdrError::DeviceLost))).unwrap();
-        let mut bytes = vec![0u8; 131_072];
-        let mut stats = SdrFoxStreamStats::default();
-        let parts = policy.raw_bytes * 2 / bytes.len();
-        for (block_index, (sequence, dropped)) in [(7, 0), (11, 16_384)].into_iter().enumerate() {
-            for part in 0..parts {
-                assert_eq!(
-                    unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-                    131_072
-                );
-                let start = part * 32_768;
-                let actual: Vec<u32> = bytes
-                    .chunks_exact(4)
-                    .map(|v| u32::from_ne_bytes(v.try_into().unwrap()))
-                    .collect();
-                assert_eq!(
-                    actual,
-                    values[start..start + 32_768]
-                        .iter()
-                        .map(|v| v.to_bits())
-                        .collect::<Vec<_>>()
-                );
-                assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
-                assert_eq!(stats.last_sequence, sequence);
-                assert_eq!(stats.last_dropped, dropped);
-                assert_eq!(stats.blocks_read, (block_index + 1) as u64);
-                assert_eq!(
-                    stats.bytes_read,
-                    ((block_index * parts + part + 1) * bytes.len()) as u64
-                );
+    for bridge in [false, true] {
+        for kib in [64, 128, 256] {
+            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+            let (handle, sender, ..) = tests::test_stream_depth(bridge, policy.bridge_blocks);
+            let values: Vec<f32> = (0..policy.raw_bytes / 2)
+                .map(|n| f32::from_bits(0x3f00_0000 + u32::try_from(n).unwrap()))
+                .collect();
+            for (sequence, dropped) in [(7, 0), (11, 16_384)] {
+                sender
+                    .send(Some(Ok(cf32_block(values.clone(), dropped, sequence))))
+                    .unwrap();
             }
-        }
-        assert_eq!(
-            unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-            0
-        );
-        assert_eq!(
-            unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-            8
-        );
-        assert_eq!(
-            &bytes[..8],
-            &[0.25f32.to_ne_bytes(), (-0.5f32).to_ne_bytes()].concat()
-        );
-        assert_eq!(
-            unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-            -1
-        );
-        assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
-        assert_eq!(stats.blocks_read, 3);
-        assert_eq!(stats.last_sequence, 12);
-        assert_eq!(stats.bytes_read, (policy.raw_bytes * 4 + 8) as u64);
-        unsafe {
-            sdrfox_close_stream(handle);
+            sender.send(Some(Err(SdrError::Timeout))).unwrap();
+            sender
+                .send(Some(Ok(cf32_block(vec![0.25, -0.5], 16_384, 12))))
+                .unwrap();
+            sender.send(Some(Err(SdrError::DeviceLost))).unwrap();
+            let mut bytes = vec![0u8; 131_072];
+            let mut stats = SdrFoxStreamStats::default();
+            let parts = policy.raw_bytes * 2 / bytes.len();
+            for (block_index, (sequence, dropped)) in [(7, 0), (11, 16_384)].into_iter().enumerate()
+            {
+                for part in 0..parts {
+                    assert_eq!(
+                        unsafe {
+                            sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000)
+                        },
+                        131_072
+                    );
+                    let start = part * 32_768;
+                    let actual: Vec<u32> = bytes
+                        .chunks_exact(4)
+                        .map(|v| u32::from_ne_bytes(v.try_into().unwrap()))
+                        .collect();
+                    assert_eq!(
+                        actual,
+                        values[start..start + 32_768]
+                            .iter()
+                            .map(|v| v.to_bits())
+                            .collect::<Vec<_>>()
+                    );
+                    assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
+                    assert_eq!(stats.last_sequence, sequence);
+                    assert_eq!(stats.last_dropped, dropped);
+                    assert_eq!(stats.blocks_read, (block_index + 1) as u64);
+                    assert_eq!(
+                        stats.bytes_read,
+                        ((block_index * parts + part + 1) * bytes.len()) as u64
+                    );
+                }
+            }
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
+                0
+            );
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
+                8
+            );
+            assert_eq!(
+                &bytes[..8],
+                &[0.25f32.to_ne_bytes(), (-0.5f32).to_ne_bytes()].concat()
+            );
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
+                -1
+            );
+            assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
+            assert_eq!(stats.blocks_read, 3);
+            assert_eq!(stats.last_sequence, 12);
+            assert_eq!(stats.bytes_read, (policy.raw_bytes * 4 + 8) as u64);
+            unsafe {
+                sdrfox_close_stream(handle);
+            }
         }
     }
 }
 
 #[test]
 fn cancellation_discards_pending_suffix_and_unblocks_each_saturated_bridge() {
-    for kib in [64, 128, 256] {
-        let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
-        let (handle, sender, stopped, finished, delivered) =
-            tests::test_stream_depth(true, policy.bridge_blocks);
-        for sequence in 0..policy.bridge_blocks + 4 {
+    for bridge in [false, true] {
+        for kib in [64, 128, 256] {
+            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+            let (handle, sender, stopped, finished, delivered) =
+                tests::test_stream_depth(bridge, policy.bridge_blocks);
+            for sequence in 0..policy.bridge_blocks + 4 {
+                sender
+                    .send(Some(Ok(cf32_block(
+                        vec![0.5; policy.raw_bytes / 2],
+                        0,
+                        sequence as u64,
+                    ))))
+                    .unwrap();
+            }
+            // Deliberately retain a nonempty suffix even for the baseline size.
+            let mut bytes = [0u8; 8];
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
+                8
+            );
+            let expected_delivered = if bridge { policy.bridge_blocks + 2 } else { 1 };
+            let deadline = Instant::now() + Duration::from_secs(1);
+            while delivered.load(Ordering::Acquire) < expected_delivered
+                && Instant::now() < deadline
+            {
+                thread::yield_now();
+            }
+            assert_eq!(delivered.load(Ordering::Acquire), expected_delivered);
+            let started = Instant::now();
+            unsafe {
+                sdrfox_stop_stream(handle);
+            }
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
+                0
+            );
+            unsafe {
+                sdrfox_close_stream(handle);
+            }
+            assert!(started.elapsed() < Duration::from_secs(1));
+            assert!(stopped.load(Ordering::Acquire));
+            assert!(finished.load(Ordering::Acquire));
+        }
+    }
+}
+
+#[test]
+fn both_modes_time_out_recover_and_cancel_an_inflight_blocked_read() {
+    for bridge in [false, true] {
+        for kib in [64, 128, 256] {
+            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+            let (handle, sender, stopped, finished, _) =
+                tests::test_stream_depth(bridge, policy.bridge_blocks);
+            let mut output = vec![0u8; 131_072];
+            let before_timeout = Instant::now();
+            assert_eq!(
+                unsafe { sdrfox_read_stream(handle, output.as_mut_ptr(), output.len(), 5) },
+                0
+            );
+            assert!(before_timeout.elapsed() < Duration::from_secs(1));
             sender
-                .send(Some(Ok(cf32_block(
-                    vec![0.5; policy.raw_bytes / 2],
-                    0,
-                    sequence as u64,
-                ))))
+                .send(Some(Ok(cf32_block(vec![0.5; policy.raw_bytes / 2], 0, 0))))
                 .unwrap();
+            for _ in 0..policy.raw_bytes * 2 / output.len() {
+                assert_eq!(
+                    unsafe { sdrfox_read_stream(handle, output.as_mut_ptr(), output.len(), 1000) },
+                    131_072
+                );
+            }
+
+            let (done, completion) = std::sync::mpsc::channel();
+            let token = handle as usize;
+            let reader = thread::spawn(move || {
+                let mut bytes = [0u8; 8];
+                let n = unsafe {
+                    sdrfox_read_stream(
+                        token as *mut SdrFoxStream,
+                        bytes.as_mut_ptr(),
+                        bytes.len(),
+                        0,
+                    )
+                };
+                done.send(n).unwrap();
+            });
+            let entry = resolve_stream(handle).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(1);
+            while !*entry.read_gate.busy.lock().unwrap() && Instant::now() < deadline {
+                thread::yield_now();
+            }
+            assert!(
+                *entry.read_gate.busy.lock().unwrap(),
+                "reader must own the permit before cancellation"
+            );
+            drop(entry);
+            let before_stop = Instant::now();
+            unsafe {
+                sdrfox_stop_stream(handle);
+            }
+            assert_eq!(completion.recv_timeout(Duration::from_secs(1)).unwrap(), 0);
+            reader.join().unwrap();
+            unsafe {
+                sdrfox_close_stream(handle);
+            }
+            assert!(before_stop.elapsed() < Duration::from_secs(1));
+            assert!(stopped.load(Ordering::Acquire));
+            assert!(finished.load(Ordering::Acquire));
         }
-        // Deliberately retain a nonempty suffix even for the baseline size.
-        let mut bytes = [0u8; 8];
-        assert_eq!(
-            unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-            8
-        );
-        let deadline = Instant::now() + Duration::from_secs(1);
-        while delivered.load(Ordering::Acquire) < policy.bridge_blocks + 2
-            && Instant::now() < deadline
-        {
-            thread::yield_now();
-        }
-        assert_eq!(delivered.load(Ordering::Acquire), policy.bridge_blocks + 2);
-        let started = Instant::now();
-        unsafe {
-            sdrfox_stop_stream(handle);
-        }
-        assert_eq!(
-            unsafe { sdrfox_read_stream(handle, bytes.as_mut_ptr(), bytes.len(), 1000) },
-            0
-        );
-        unsafe {
-            sdrfox_close_stream(handle);
-        }
-        assert!(started.elapsed() < Duration::from_secs(1));
-        assert!(stopped.load(Ordering::Acquire));
-        assert!(finished.load(Ordering::Acquire));
     }
 }

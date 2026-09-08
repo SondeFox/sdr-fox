@@ -60,10 +60,20 @@ and `256` in counterbalanced order. Settings below match the verified 10 MS/s,
 404 MHz, Quiet Rural, bias-on baseline; root must reverify before running.
 
 ```
-target/release/examples/macos_transfer_probe --exclusive-hardware --kib 64 --seconds 60 --frequency 404000000 --rate 10000000 --lna 140 --mixer 150 --vga 150 --lna-agc 0 --mixer-agc 0 --bias 1
+target/release/examples/macos_transfer_probe --exclusive-hardware --kib 64 --seconds 60 --frequency 404000000 --rate 10000000 --lna 140 --mixer 150 --vga 150 --lna-agc 0 --mixer-agc 0 --bias 1 --bridge 1
 ```
 
-All RF parameters are mandatory. There is no overall gain or PPM operation;
+All RF parameters and `--bridge 0|1` are mandatory. This probe-only switch
+compares the existing direct C-ABI receive path with the synthesis bridge;
+production remains 64 KiB with the bridge enabled. Device family selection
+always remains Airspy, independently of bridge choice. Direct mode allocates
+no CF32 bridge queue or synthesis worker, and reports `bridge_enabled: false`
+and zero bridge blocks. Its raw inflight/delivery byte budgets are unchanged.
+Both JSON events identify the mode. Direct receive synthesizes on the calling
+thread after the existing native timed receive; this experiment does not add
+an interruptible synthesis step or strengthen existing read-deadline guarantees.
+
+There is no overall gain or PPM operation;
 AGC and individual stage gain writes match the app's control order. The probe
 requires exactly one Airspy One and discards sample bytes without displaying
 or saving them. Output has only explicit RF controls, PID and numeric counters.
@@ -97,9 +107,11 @@ eventual accepted source must also pass the signed-app full-workload comparison.
 Tests compare current synthesis bits, clip totals and continued state across
 64/128/256 KiB and odd/short partitions for both filter modes; production
 synthesis source is unchanged here. Adapter tests drain large CF32 blocks
-using the exact app extent and check bytes/metadata across retained suffixes,
-timeout, short read, error and cancellation. Every candidate's bridge is
-saturated before stop. Transport tests fill the 2 MiB raw queue, force known
+using the exact app extent in both receive modes and check bytes/metadata
+across retained suffixes, timeout, short read, error and cancellation. Every
+candidate's enabled bridge is saturated before stop. Both modes exercise a
+real timed-out receive followed by a large block, then stop an in-flight
+blocking read after verifying that it owns the read permit. Transport tests fill the 2 MiB raw queue, force known
 full/short newest-block drops, check exact raw accounting, and stop while the
 producer is parked. Existing stall recovery and cancellation tests remain.
 
