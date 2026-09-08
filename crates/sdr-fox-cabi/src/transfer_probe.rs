@@ -12,7 +12,7 @@ use sdr_fox_core::{
 };
 use sdr_fox_transport::{stream::StreamControl, NusbTransport};
 
-use super::transfer_policy::TransferPolicy;
+use super::transfer_policy::{PayloadProfile, TransferPolicy};
 
 #[derive(Clone, Copy)]
 enum ReceiveMode {
@@ -28,6 +28,7 @@ impl ReceiveMode {
 
 struct Settings {
     policy: TransferPolicy,
+    profile: PayloadProfile,
     seconds: u64,
     frequency: u64,
     lna: i32,
@@ -43,9 +44,21 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
     let mut args = args.peekable();
     let mut values = BTreeMap::new();
     let mut exclusive = false;
+    let mut profile = None;
     while let Some(key) = args.next() {
         if key == "--exclusive-hardware" {
+            if exclusive {
+                return Err("Duplicate option");
+            }
             exclusive = true;
+        } else if key == "--payload-profile" {
+            if profile.is_some() {
+                return Err("Duplicate option");
+            }
+            profile = Some(
+                PayloadProfile::parse(&args.next().ok_or("Missing profile value")?)
+                    .ok_or("--payload-profile must be baseline, 4-4-1 or 8-4-1")?,
+            );
         } else {
             if !matches!(
                 key.as_str(),
@@ -82,9 +95,13 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
     if get("--rate")? != 10_000_000 {
         return Err("Probe requires full 10000000 IQ samples/second");
     }
-    let policy =
-        TransferPolicy::candidate(usize::try_from(get("--kib")?).map_err(|_| "Invalid KiB")?)
-            .ok_or("--kib must be 64, 128 or 256")?;
+    let profile = profile.unwrap_or(PayloadProfile::Baseline);
+    let kib = usize::try_from(get("--kib")?).map_err(|_| "Invalid KiB")?;
+    let policy = TransferPolicy::diagnostic(kib, profile)
+        .ok_or("Baseline --kib must be 64, 128 or 256; larger profiles require --kib 256")?;
+    if profile != PayloadProfile::Baseline && get("--bridge")? != 1 {
+        return Err("Larger payload profiles require --bridge 1");
+    }
     let seconds = get("--seconds")?;
     if !(1..=120).contains(&seconds) {
         return Err("--seconds must be 1..120");
@@ -109,6 +126,7 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
     };
     Ok(Settings {
         policy,
+        profile,
         seconds,
         frequency,
         lna: stage("--lna", 140)?,
@@ -125,7 +143,7 @@ fn settings(args: impl Iterator<Item = String>) -> Result<Settings, &'static str
     })
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Arrivals {
     count: u64,
     previous: Option<Instant>,
@@ -159,7 +177,7 @@ impl Arrivals {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CompletionStats {
     bytes: u64,
     sizes: BTreeMap<usize, u64>,
@@ -275,13 +293,10 @@ fn configure_receiver(
     Ok(rate)
 }
 
-/// Run only after the caller has stopped every other receiver owner. Errors
-/// are static messages so backend-provided private descriptors cannot leak.
-pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
-    let config = settings(args)?;
-    if !cfg!(target_os = "macos") {
-        return Err("Physical probe is macOS-only");
-    }
+fn open_observed_receiver(
+    completion: Arc<Mutex<CompletionStats>>,
+    control: Arc<Mutex<Option<StreamControl>>>,
+) -> Result<Box<dyn sdr_fox_core::SdrDevice>, &'static str> {
     let locations = sdr_fox_transport::enumerate_usb_devices().map_err(|_| "Enumeration failed")?;
     if locations
         .iter()
@@ -294,8 +309,6 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
     let location =
         super::select_location(&locations, 0, super::Kind::Airspy).ok_or("Airspy unavailable")?;
     let desc = super::descriptor_for(&location, sdr_fox_core::DeviceKind::Airspy);
-    let completion = Arc::new(Mutex::new(CompletionStats::default()));
-    let control = Arc::new(Mutex::new(None));
     let transport = ObservedTransport {
         inner: NusbTransport::open(
             location.vendor_id,
@@ -303,14 +316,39 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
             location.match_index,
         )
         .map_err(|_| "Open failed")?,
-        completion: completion.clone(),
-        control: control.clone(),
+        completion,
+        control,
     };
-    let mut device = super::AirspyBackend
+    super::AirspyBackend
         .open(&desc, Box::new(transport))
-        .map_err(|_| "Airspy initialization failed")?;
+        .map_err(|_| "Airspy initialization failed")
+}
+
+// Integer throughput floors avoid precision loss and keep JSON finite. The
+// observation counters and elapsed nanoseconds remain available for analysis.
+fn per_second(units: u64, elapsed: Duration) -> u128 {
+    u128::from(units) * 1_000_000_000 / elapsed.as_nanos().max(1)
+}
+
+/// Run only after the caller has stopped every other receiver owner. Errors
+/// are static messages so backend-provided private descriptors cannot leak.
+pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
+    let config = settings(args)?;
+    if !cfg!(target_os = "macos") {
+        return Err("Physical probe is macOS-only");
+    }
+    let completion = Arc::new(Mutex::new(CompletionStats::default()));
+    let control = Arc::new(Mutex::new(None));
+    let mut device = open_observed_receiver(completion.clone(), control.clone())?;
     let rate = configure_receiver(device.as_mut(), &config)?;
     println!("{{\"event\":\"starting\",\"pid\":{},\"family\":\"airspy_one\",\"rate\":{},\"frequency\":{},\"lna\":{},\"mixer\":{},\"vga\":{},\"lna_agc\":{},\"mixer_agc\":{},\"bias\":{},\"raw_bytes\":{},\"inflight\":{},\"raw_queue_blocks\":{},\"bridge_enabled\":{},\"bridge_blocks\":{},\"seconds\":{}}}", std::process::id(), rate, config.frequency, config.lna, config.mixer, config.vga, config.lna_agc, config.mixer_agc, config.bias, config.policy.raw_bytes, config.policy.inflight, config.policy.raw_queue_blocks, config.mode.bridged(), if config.mode.bridged() { config.policy.bridge_blocks } else { 0 }, config.seconds);
+    let (usb_payload, raw_payload, bridge_payload) = config.policy.payload_bytes();
+    let active_bridge_payload = if config.mode.bridged() {
+        bridge_payload
+    } else {
+        0
+    };
+    println!("{{\"event\":\"payload_budget\",\"profile\":\"{}\",\"inflight_raw_bytes\":{},\"queued_raw_bytes\":{},\"bridged_cf32_bytes\":{},\"total_payload_bytes\":{},\"inflight_coverage_ns_at_40MBps\":{},\"raw_queue_coverage_ns_at_40MBps\":{}}}", config.profile.name(), usb_payload, raw_payload, active_bridge_payload, usb_payload + raw_payload + active_bridge_payload, usb_payload as u64 * 25, raw_payload as u64 * 25);
     let started = Instant::now();
     let stream = device
         .start_stream(config.policy.config(IqFormat::Cf32))
@@ -353,6 +391,19 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
         }
     }
     let receive_elapsed = started.elapsed();
+    // Lock-bound snapshots describe their own interval. The legacy completion
+    // total below intentionally includes successful reaps during teardown.
+    let timed_completion = completion
+        .lock()
+        .map_err(|_| "Completion stats unavailable")?
+        .clone();
+    let usb_snapshot_elapsed = started.elapsed();
+    let timed_native = control
+        .lock()
+        .map_err(|_| "Control unavailable")?
+        .as_ref()
+        .ok_or("No native stream")?
+        .stats();
     let mut copy = super::SdrFoxStreamStats::default();
     // SAFETY: live token and stack-owned writable stats output.
     if unsafe { super::sdrfox_stream_stats(handle, &raw mut copy) } != 0 {
@@ -371,6 +422,7 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
         .lock()
         .map_err(|_| "Completion stats unavailable")?;
     println!("{{\"event\":\"complete\",\"bridge_enabled\":{},\"elapsed_ns\":{},\"stop_and_join_ns\":{},\"successful_usb_bytes\":{},\"successful_usb_size_histogram\":{},\"histogram_unbucketed\":{},\"usb_arrivals\":{},\"app_read_arrivals\":{},\"read_timeouts_or_eof\":{},\"read_errors\":{},\"short_reads\":{},\"cf32_bytes_read\":{},\"native_blocks_accepted\":{},\"last_sequence\":{},\"last_iq_drop_estimate\":{},\"raw_bytes_delivered\":{},\"raw_pairs_drop_estimate\":{},\"dropped_raw_blocks\":{},\"failed_transfers\":{},\"observed_unknown_overrun_events\":{},\"hardware_loss_counter_available\":false,\"raw_queue_high_water_blocks\":{}}}", config.mode.bridged(), receive_elapsed.as_nanos(), stop_ns, completion.bytes, completion.sizes_json(), completion.unbucketed_completions, completion.arrivals.json(started), reads.json(started), timeouts, errors, short_reads, copy.bytes_read, copy.blocks_read, copy.last_sequence, copy.last_dropped, native.bytes_delivered, native.sample_pairs_dropped_estimate, native.dropped_blocks, native.failed_transfers, native.hardware_overruns_unknown, native.high_water_mark);
+    println!("{{\"event\":\"measurement_windows\",\"profile\":\"{}\",\"cabi_receive_elapsed_ns\":{},\"cabi_cf32_bytes_per_second\":{},\"cabi_iq_samples_per_second\":{},\"usb_snapshot_elapsed_ns\":{},\"successful_usb_bytes_before_stop\":{},\"successful_usb_bytes_after_snapshot\":{},\"successful_usb_bytes_per_second_before_stop\":{},\"usb_arrivals_before_stop\":{},\"raw_bytes_delivered_before_stop\":{},\"dropped_raw_blocks_before_stop\":{},\"raw_queue_high_water_payload_bytes_upper_bound\":{},\"successful_usb_total_includes_teardown\":true,\"hardware_loss_counter_available\":false}}", config.profile.name(), receive_elapsed.as_nanos(), per_second(copy.bytes_read, receive_elapsed), per_second(copy.bytes_read / 8, receive_elapsed), usb_snapshot_elapsed.as_nanos(), timed_completion.bytes, completion.bytes - timed_completion.bytes, per_second(timed_completion.bytes, usb_snapshot_elapsed), timed_completion.arrivals.json(started), timed_native.bytes_delivered, timed_native.dropped_blocks, native.high_water_mark * config.policy.raw_bytes as u64);
     if errors > 0 {
         Err("Probe observed read errors")
     } else {
@@ -381,6 +433,44 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn throughput_preserves_exact_counter_scale_without_nonfinite_json() {
+        assert_eq!(
+            per_second(7_200_000_000, Duration::from_secs(90)),
+            80_000_000
+        );
+        assert_eq!(per_second(900_000_000, Duration::from_secs(90)), 10_000_000);
+        assert_eq!(per_second(65_536, Duration::from_millis(3)), 21_845_333);
+        assert_eq!(per_second(0, Duration::ZERO), 0);
+        assert_eq!(
+            per_second(u64::MAX, Duration::from_secs(1)),
+            u128::from(u64::MAX)
+        );
+    }
+
+    #[test]
+    fn payload_profiles_are_explicit_bounded_and_keep_synthesis_enabled() {
+        let args = "--exclusive-hardware --kib 256 --seconds 30 --frequency 404000000 --rate 10000000 --lna 140 --mixer 150 --vga 150 --lna-agc 0 --mixer-agc 0 --bias 0 --bridge 1";
+        let parse = |text: &str| settings(text.split_whitespace().map(str::to_owned));
+        assert_eq!(parse(args).unwrap().profile, PayloadProfile::Baseline);
+        for (name, count) in [("baseline", 4), ("4-4-1", 16), ("8-4-1", 32)] {
+            let input = format!("{args} --payload-profile {name}");
+            let settings = parse(&input).unwrap();
+            assert_eq!(settings.profile.name(), name);
+            assert_eq!(settings.policy.inflight, count);
+            assert!(settings.mode.bridged());
+            assert!(parse(&format!("{input} --payload-profile baseline")).is_err());
+            if name != "baseline" {
+                assert!(parse(&input.replace("--kib 256", "--kib 128")).is_err());
+                assert!(parse(&input.replace("--bridge 1", "--bridge 0")).is_err());
+            }
+        }
+        for name in ["", "16-4-1", "8-8-1", "8-4-2", "18446744073709551615"] {
+            assert!(parse(&format!("{args} --payload-profile {name}")).is_err());
+        }
+        assert!(parse(&format!("{args} --exclusive-hardware")).is_err());
+    }
 
     #[test]
     fn missing_or_invalid_controls_fail_before_hardware_access() {
