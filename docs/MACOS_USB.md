@@ -89,10 +89,10 @@ zero native drop counter. Bias remained off and samples were discarded.
 
 ## Background Airspy transport follow-up
 
-The later C-ABI macOS Airspy policy selects256KiB raw transfers while retaining
+The later C-ABI macOS Airspy policy selects 256 KiB raw transfers while retaining
 the synthesis bridge. Inflight raw, queued raw and queued CF32 payload budgets
-remain1/2/1MiB; scratch, active and pending blocks are additional memory.
-The app's aligned128KiB C reads retain and drain larger CF32 block suffixes.
+remain 1/2/1 MiB; scratch, active and pending blocks are additional memory.
+The app's aligned 128 KiB C reads retain and drain larger CF32 block suffixes.
 Detailed counterbalanced physical observations and the rejected direct-mode
 experiment are in [the transfer record](MACOS_AIRSPY_TRANSFER_CPU.md).
 Observed software errors were zero in those bounded worker-source trials; no

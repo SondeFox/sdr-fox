@@ -115,7 +115,7 @@ Published nusb 0.2.7 remains unmodified (Apache-2.0 OR MIT). RTL-SDR Blog V4
 clock selection uses manufacturer-published board oscillator and EEPROM
 identity facts only; no GPL implementation was consulted. See docs/MACOS_USB.md.
 
-First-party Airspy performance additions (September2026)
+First-party Airspy performance additions (September 2026)
 ------------------------------------------------------
 The safe FIR/routing changes, synthetic CF32 comparison harness and opt-in
 macOS transfer probe were authored in this clean repository against canonical
