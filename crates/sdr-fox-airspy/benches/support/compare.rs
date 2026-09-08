@@ -91,9 +91,64 @@ fn parity() {
     }
     println!("{{\"parity\":\"passed\",\"compared_calls\":{calls},\"formats\":6,\"tap_counts\":8,\"patterns\":7}}");
 }
+
+fn packed_boundary_parity() {
+    // Every 16-bit encoding appears in each packed position; the unused high
+    // nibble must not affect either the samples or the raw rail statistic.
+    let exhaustive: Vec<u8> = (0..=u16::MAX)
+        .flat_map(|v| [v, 2048, 2048, v])
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let mut calls = 0;
+    for taps in [45, 47] {
+        for format in 0..6 {
+            let mut old = reference::IqSynthesizer::with_taps(taps);
+            let mut new = candidate::IqSynthesizer::with_taps(taps);
+            assert_eq!(
+                reference::oracle_process(&mut old, &exhaustive, format),
+                candidate::oracle_process(&mut new, &exhaustive, format)
+            );
+            assert_eq!(reference::oracle_state(&old), candidate::oracle_state(&new));
+            calls += 1;
+            let prefix = [0xffu8, 0xff, 0, 0, 4, 0, 5, 0];
+            let mut raw = vec![0xa5]; // deliberately unaligned slice start
+            raw.extend(
+                [0u16, 4, 5, 4091, 4092, 4095, 0xf005, 0xfffc]
+                    .into_iter()
+                    .flat_map(u16::to_le_bytes),
+            );
+            let raw = &raw[1..];
+            for prefix_len in 0..=prefix.len() {
+                for split in 0..=raw.len() {
+                    old.reset();
+                    new.reset();
+                    for block in [
+                        &prefix[..prefix_len],
+                        &raw[..split],
+                        &[],
+                        &raw[split..],
+                        &[],
+                        &[0xff],
+                        &[],
+                        &[0x0f],
+                    ] {
+                        assert_eq!(reference::oracle_process(&mut old, block, format),
+                            candidate::oracle_process(&mut new, block, format),
+                            "packed boundary output taps={taps} format={format} prefix={prefix_len} split={split}");
+                        assert_eq!(reference::oracle_state(&old), candidate::oracle_state(&new),
+                            "packed boundary state taps={taps} format={format} prefix={prefix_len} split={split}");
+                        calls += 1;
+                    }
+                }
+            }
+        }
+    }
+    println!("{{\"packed_boundary_parity\":\"passed\",\"compared_calls\":{calls},\"u16_encodings\":65536,\"packed_positions\":2,\"formats\":6,\"tap_counts\":2}}");
+}
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     parity();
+    packed_boundary_parity();
     if args.iter().any(|x| x == "--verify-only") {
         return;
     }
