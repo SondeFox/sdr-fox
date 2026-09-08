@@ -62,6 +62,8 @@ sequence/drop estimates, read errors/timeouts and successful USB size histogram.
 
 - C ABI copied bytes and IQ/s use the timed app receive interval, which starts
   before stream creation. USB startup and first-read latency are included.
+  Throughput fields are integer floors; exact counters and nanoseconds remain
+  available for fractional analysis.
 - The pre-stop USB count and arrivals are a lock-consistent snapshot taken
   just after timed app reads end, divided by that snapshot's own elapsed time.
 - The legacy successful USB total includes observed successful reaps after

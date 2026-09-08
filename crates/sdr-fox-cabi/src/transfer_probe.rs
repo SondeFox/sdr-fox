@@ -293,13 +293,10 @@ fn configure_receiver(
     Ok(rate)
 }
 
-/// Run only after the caller has stopped every other receiver owner. Errors
-/// are static messages so backend-provided private descriptors cannot leak.
-pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
-    let config = settings(args)?;
-    if !cfg!(target_os = "macos") {
-        return Err("Physical probe is macOS-only");
-    }
+fn open_observed_receiver(
+    completion: Arc<Mutex<CompletionStats>>,
+    control: Arc<Mutex<Option<StreamControl>>>,
+) -> Result<Box<dyn sdr_fox_core::SdrDevice>, &'static str> {
     let locations = sdr_fox_transport::enumerate_usb_devices().map_err(|_| "Enumeration failed")?;
     if locations
         .iter()
@@ -312,8 +309,6 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
     let location =
         super::select_location(&locations, 0, super::Kind::Airspy).ok_or("Airspy unavailable")?;
     let desc = super::descriptor_for(&location, sdr_fox_core::DeviceKind::Airspy);
-    let completion = Arc::new(Mutex::new(CompletionStats::default()));
-    let control = Arc::new(Mutex::new(None));
     let transport = ObservedTransport {
         inner: NusbTransport::open(
             location.vendor_id,
@@ -321,12 +316,30 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
             location.match_index,
         )
         .map_err(|_| "Open failed")?,
-        completion: completion.clone(),
-        control: control.clone(),
+        completion,
+        control,
     };
-    let mut device = super::AirspyBackend
+    super::AirspyBackend
         .open(&desc, Box::new(transport))
-        .map_err(|_| "Airspy initialization failed")?;
+        .map_err(|_| "Airspy initialization failed")
+}
+
+// Integer throughput floors avoid precision loss and keep JSON finite. The
+// observation counters and elapsed nanoseconds remain available for analysis.
+fn per_second(units: u64, elapsed: Duration) -> u128 {
+    u128::from(units) * 1_000_000_000 / elapsed.as_nanos().max(1)
+}
+
+/// Run only after the caller has stopped every other receiver owner. Errors
+/// are static messages so backend-provided private descriptors cannot leak.
+pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
+    let config = settings(args)?;
+    if !cfg!(target_os = "macos") {
+        return Err("Physical probe is macOS-only");
+    }
+    let completion = Arc::new(Mutex::new(CompletionStats::default()));
+    let control = Arc::new(Mutex::new(None));
+    let mut device = open_observed_receiver(completion.clone(), control.clone())?;
     let rate = configure_receiver(device.as_mut(), &config)?;
     println!("{{\"event\":\"starting\",\"pid\":{},\"family\":\"airspy_one\",\"rate\":{},\"frequency\":{},\"lna\":{},\"mixer\":{},\"vga\":{},\"lna_agc\":{},\"mixer_agc\":{},\"bias\":{},\"raw_bytes\":{},\"inflight\":{},\"raw_queue_blocks\":{},\"bridge_enabled\":{},\"bridge_blocks\":{},\"seconds\":{}}}", std::process::id(), rate, config.frequency, config.lna, config.mixer, config.vga, config.lna_agc, config.mixer_agc, config.bias, config.policy.raw_bytes, config.policy.inflight, config.policy.raw_queue_blocks, config.mode.bridged(), if config.mode.bridged() { config.policy.bridge_blocks } else { 0 }, config.seconds);
     let (usb_payload, raw_payload, bridge_payload) = config.policy.payload_bytes();
@@ -409,7 +422,7 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
         .lock()
         .map_err(|_| "Completion stats unavailable")?;
     println!("{{\"event\":\"complete\",\"bridge_enabled\":{},\"elapsed_ns\":{},\"stop_and_join_ns\":{},\"successful_usb_bytes\":{},\"successful_usb_size_histogram\":{},\"histogram_unbucketed\":{},\"usb_arrivals\":{},\"app_read_arrivals\":{},\"read_timeouts_or_eof\":{},\"read_errors\":{},\"short_reads\":{},\"cf32_bytes_read\":{},\"native_blocks_accepted\":{},\"last_sequence\":{},\"last_iq_drop_estimate\":{},\"raw_bytes_delivered\":{},\"raw_pairs_drop_estimate\":{},\"dropped_raw_blocks\":{},\"failed_transfers\":{},\"observed_unknown_overrun_events\":{},\"hardware_loss_counter_available\":false,\"raw_queue_high_water_blocks\":{}}}", config.mode.bridged(), receive_elapsed.as_nanos(), stop_ns, completion.bytes, completion.sizes_json(), completion.unbucketed_completions, completion.arrivals.json(started), reads.json(started), timeouts, errors, short_reads, copy.bytes_read, copy.blocks_read, copy.last_sequence, copy.last_dropped, native.bytes_delivered, native.sample_pairs_dropped_estimate, native.dropped_blocks, native.failed_transfers, native.hardware_overruns_unknown, native.high_water_mark);
-    println!("{{\"event\":\"measurement_windows\",\"profile\":\"{}\",\"cabi_receive_elapsed_ns\":{},\"cabi_cf32_bytes_per_second\":{},\"cabi_iq_samples_per_second\":{},\"usb_snapshot_elapsed_ns\":{},\"successful_usb_bytes_before_stop\":{},\"successful_usb_bytes_after_snapshot\":{},\"successful_usb_bytes_per_second_before_stop\":{},\"usb_arrivals_before_stop\":{},\"raw_bytes_delivered_before_stop\":{},\"dropped_raw_blocks_before_stop\":{},\"raw_queue_high_water_payload_bytes_upper_bound\":{},\"successful_usb_total_includes_teardown\":true,\"hardware_loss_counter_available\":false}}", config.profile.name(), receive_elapsed.as_nanos(), copy.bytes_read as f64 / receive_elapsed.as_secs_f64(), copy.bytes_read as f64 / 8.0 / receive_elapsed.as_secs_f64(), usb_snapshot_elapsed.as_nanos(), timed_completion.bytes, completion.bytes - timed_completion.bytes, timed_completion.bytes as f64 / usb_snapshot_elapsed.as_secs_f64(), timed_completion.arrivals.json(started), timed_native.bytes_delivered, timed_native.dropped_blocks, native.high_water_mark * config.policy.raw_bytes as u64);
+    println!("{{\"event\":\"measurement_windows\",\"profile\":\"{}\",\"cabi_receive_elapsed_ns\":{},\"cabi_cf32_bytes_per_second\":{},\"cabi_iq_samples_per_second\":{},\"usb_snapshot_elapsed_ns\":{},\"successful_usb_bytes_before_stop\":{},\"successful_usb_bytes_after_snapshot\":{},\"successful_usb_bytes_per_second_before_stop\":{},\"usb_arrivals_before_stop\":{},\"raw_bytes_delivered_before_stop\":{},\"dropped_raw_blocks_before_stop\":{},\"raw_queue_high_water_payload_bytes_upper_bound\":{},\"successful_usb_total_includes_teardown\":true,\"hardware_loss_counter_available\":false}}", config.profile.name(), receive_elapsed.as_nanos(), per_second(copy.bytes_read, receive_elapsed), per_second(copy.bytes_read / 8, receive_elapsed), usb_snapshot_elapsed.as_nanos(), timed_completion.bytes, completion.bytes - timed_completion.bytes, per_second(timed_completion.bytes, usb_snapshot_elapsed), timed_completion.arrivals.json(started), timed_native.bytes_delivered, timed_native.dropped_blocks, native.high_water_mark * config.policy.raw_bytes as u64);
     if errors > 0 {
         Err("Probe observed read errors")
     } else {
@@ -420,6 +433,21 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn throughput_preserves_exact_counter_scale_without_nonfinite_json() {
+        assert_eq!(
+            per_second(7_200_000_000, Duration::from_secs(90)),
+            80_000_000
+        );
+        assert_eq!(per_second(900_000_000, Duration::from_secs(90)), 10_000_000);
+        assert_eq!(per_second(65_536, Duration::from_millis(3)), 21_845_333);
+        assert_eq!(per_second(0, Duration::ZERO), 0);
+        assert_eq!(
+            per_second(u64::MAX, Duration::from_secs(1)),
+            u128::from(u64::MAX)
+        );
+    }
 
     #[test]
     fn payload_profiles_are_explicit_bounded_and_keep_synthesis_enabled() {
