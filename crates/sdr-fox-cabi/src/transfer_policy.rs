@@ -1,12 +1,12 @@
-//! Internal transport candidates. The shipping choice stays at the baseline
-//! until controlled physical measurements justify a different value.
+//! Internal transport candidates. Root's controlled physical comparison chose
+//! 256 KiB with the existing synthesis bridge; see the transfer CPU receipt.
 
 use sdr_fox_core::{IqFormat, StreamConfig};
 
 pub(super) const INFLIGHT_RAW_BYTES: usize = 1_048_576;
 pub(super) const QUEUED_RAW_BYTES: usize = 2_097_152;
 pub(super) const BRIDGED_CF32_BYTES: usize = 1_048_576;
-const PRODUCTION_AIRSPY_KIB: usize = 64;
+const PRODUCTION_AIRSPY_KIB: usize = 256;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct TransferPolicy {
@@ -88,5 +88,10 @@ mod tests {
             assert_eq!(actual.queue_depth, expected.queue_depth);
             assert_eq!(policy.bridge_blocks, 8);
         }
+        let selected = policy_for_platform(true, true);
+        assert_eq!(selected.raw_bytes, 262_144);
+        assert_eq!(selected.inflight, 4);
+        assert_eq!(selected.raw_queue_blocks, 8);
+        assert_eq!(selected.bridge_blocks, 2);
     }
 }

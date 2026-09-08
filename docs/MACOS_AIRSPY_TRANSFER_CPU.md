@@ -12,9 +12,9 @@ do not reduce samplewise synthesis arithmetic or the app's read/callback rate.
 
 ## Candidate policy and ownership
 
-The internal C-ABI policy defines three candidates. Production initially stays
-at 64 KiB pending root-operated physical comparison. Only macOS Airspy is
-eligible for a later selected policy; shared StreamConfig defaults and all
+The internal C-ABI policy defines three candidates. After root-operated
+physical comparison, macOS Airspy selects 256 KiB and retains the synthesis
+bridge. Only macOS Airspy uses the selected policy; shared StreamConfig defaults and all
 other platform/receiver combinations remain unchanged. No public C/JNI API or
 ABI is added.
 
@@ -65,7 +65,7 @@ target/release/examples/macos_transfer_probe --exclusive-hardware --kib 64 --sec
 
 All RF parameters and `--bridge 0|1` are mandatory. This probe-only switch
 compares the existing direct C-ABI receive path with the synthesis bridge;
-production remains 64 KiB with the bridge enabled. Device family selection
+production uses the selected 256 KiB with the bridge enabled. Device family selection
 always remains Airspy, independently of bridge choice. Direct mode allocates
 no CF32 bridge queue or synthesis worker, and reports `bridge_enabled: false`
 and zero bridge blocks. Its raw inflight/delivery byte budgets are unchanged.
@@ -101,6 +101,61 @@ as if all counters froze at exactly one instant. Root wraps the process with
 correctly scaled user/system CPU, syscalls and context-switch measurements.
 This source/copy probe does not include Kotlin or native sonde decoding; the
 eventual accepted source must also pass the signed-app full-workload comparison.
+
+## Physical result and integration choice
+
+Root operated six 60-second streams in order 64, 128, 256, 256, 128, 64 KiB
+at the explicit settings above, using source `ed1eca4ba82e44770d02a0f0ba37882df76b57ee`
+and probe SHA-256
+`dba49f0d0c363e656a6fe4dd42fdbec42ada1118f05f38b7bdc79c7a9dfb3ea0`.
+The corrected Mach timebase was 125/3; retained process intervals were about
+51 seconds after excluding startup/teardown.
+
+| Raw transfer | Total CPU, two runs | System CPU, two runs | Mach syscalls/s, two runs |
+| --- | ---: | ---: | ---: |
+| 64 KiB | 19.208%, 13.570% | 5.093%, 4.014% | 6849.7, 7286.8 |
+| 128 KiB | 18.363%, 12.035% | 3.827%, 2.801% | 3568.9, 3657.8 |
+| 256 KiB | 17.064%, 14.640% | 2.551%, 2.251% | 1820.9, 1822.8 |
+
+Actual successful USB payload sizes matched each requested size. Delivered
+throughput was approximately 9.996–9.999 million IQ pairs/s over the complete
+measurement loop, which includes startup and undrained queue boundaries.
+Observed software queue drops, failed transfers, read errors, timeouts and
+unknown-overrun events were zero; this is not hardware sample-loss proof.
+Stop and joins took 0.968–2.964 ms.
+
+Root then ran four 30-second direct/bridge diagnostics at source
+`98addff8c5b2395d9117f0208da05efbed10a339`, probe SHA-256
+`02f262178b3f5477e50da4091541c2d02a03a3e306ed932f902f5de308cccda1`:
+
+| Transfer/mode | Total CPU | System CPU | Mach syscalls/s |
+| --- | ---: | ---: | ---: |
+| 128 KiB, bridge | 17.873% | 3.916% | 3578.4 |
+| 128 KiB, direct | 17.828% | 3.664% | 2960.1 |
+| 256 KiB, direct | 16.684% | 2.487% | 1520.7 |
+| 256 KiB, bridge | 17.100% | 2.671% | 1821.6 |
+
+These shorter runs also had the requested USB lengths and no observed
+software errors. Their delivered rates were 9.991–9.998 million IQ pairs/s;
+stop/join remained below 1.01 ms. The single direct-256 run reached raw queue
+high water 8/8 with a 67 ms read gap, versus 2/8 and 17.1 ms in bridge-256;
+the sequential single pass does not establish a causal latency difference.
+Direct mode's total-CPU improvement was only 0.045 percentage point at 128 KiB
+and 0.416 point at 256 KiB in this pass, so it remains diagnostic-only.
+
+Root chose **256 KiB with the bridge** as the integration candidate because
+its system CPU and Mach-call reduction were consistent, throughput remained
+full-rate and observed stop latency stayed below 3 ms. User-time variation
+prevents claiming that 256 KiB decisively beats 128 KiB in total CPU. Raw
+inflight/delivery/bridge payload budgets remain exactly 1/2/1 MiB, and no other
+platform/receiver defaults change. These are source/synthesis/copy process
+measurements, not whole-app decoder CPU or energy acceptance.
+
+The main repository's ignored `macos/build/performance/transport-physical-v2/`
+holds original per-run receipts. Root's `root-selection-summary.json` has
+SHA-256 `3c6a24c1859db39f2a6865a09175d011c900822cce9f24e8bc09d4988482f13b`.
+The canonical graph worker receipt preserves their source/artifact hashes,
+settings, counters and limitations for the separate integration review.
 
 ## Deterministic evidence and acceptance
 
