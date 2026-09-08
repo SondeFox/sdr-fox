@@ -2,6 +2,19 @@ use super::*;
 use sdr_fox_airspy::iq_synth::IqSynthesizer;
 use sdr_fox_core::{IqBlock, IqSamples, SdrError};
 
+fn policies() -> Vec<transfer_policy::TransferPolicy> {
+    use transfer_policy::{PayloadProfile, TransferPolicy};
+    [64, 128, 256]
+        .into_iter()
+        .map(|kib| TransferPolicy::candidate(kib).unwrap())
+        .chain(
+            [PayloadProfile::Resilience4, PayloadProfile::Resilience8]
+                .into_iter()
+                .map(|profile| TransferPolicy::diagnostic(256, profile).unwrap()),
+        )
+        .collect()
+}
+
 fn cf32_block(samples: Vec<f32>, dropped: u64, sequence: u64) -> IqBlock {
     IqBlock {
         samples: IqSamples::Cf32(samples),
@@ -71,8 +84,7 @@ fn large_raw_and_odd_partitions_preserve_current_synthesis_bits() {
 #[test]
 fn app_extent_drains_large_suffixes_with_coherent_metadata_and_errors() {
     for bridge in [false, true] {
-        for kib in [64, 128, 256] {
-            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+        for policy in policies() {
             let (handle, sender, ..) = tests::test_stream_depth(bridge, policy.bridge_blocks);
             let values: Vec<f32> = (0..policy.raw_bytes / 2)
                 .map(|n| f32::from_bits(0x3f00_0000 + u32::try_from(n).unwrap()))
@@ -151,8 +163,7 @@ fn app_extent_drains_large_suffixes_with_coherent_metadata_and_errors() {
 #[test]
 fn cancellation_discards_pending_suffix_and_unblocks_each_saturated_bridge() {
     for bridge in [false, true] {
-        for kib in [64, 128, 256] {
-            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+        for policy in policies() {
             let (handle, sender, stopped, finished, delivered) =
                 tests::test_stream_depth(bridge, policy.bridge_blocks);
             for sequence in 0..policy.bridge_blocks + 4 {
@@ -199,8 +210,7 @@ fn cancellation_discards_pending_suffix_and_unblocks_each_saturated_bridge() {
 #[test]
 fn both_modes_time_out_recover_and_cancel_an_inflight_blocked_read() {
     for bridge in [false, true] {
-        for kib in [64, 128, 256] {
-            let policy = transfer_policy::TransferPolicy::candidate(kib).unwrap();
+        for policy in policies() {
             let (handle, sender, stopped, finished, _) =
                 tests::test_stream_depth(bridge, policy.bridge_blocks);
             let mut output = vec![0u8; 131_072];

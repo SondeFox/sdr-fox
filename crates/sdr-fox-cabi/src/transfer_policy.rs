@@ -8,7 +8,36 @@ pub(super) const QUEUED_RAW_BYTES: usize = 2_097_152;
 pub(super) const BRIDGED_CF32_BYTES: usize = 1_048_576;
 const PRODUCTION_AIRSPY_KIB: usize = 256;
 
-#[derive(Clone, Copy, Debug)]
+#[cfg(any(test, feature = "transfer-probe"))]
+/// Fixed diagnostic payload budgets; these never affect production selection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PayloadProfile {
+    Baseline,
+    Resilience4,
+    Resilience8,
+}
+
+#[cfg(any(test, feature = "transfer-probe"))]
+impl PayloadProfile {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "baseline" => Some(Self::Baseline),
+            "4-4-1" => Some(Self::Resilience4),
+            "8-4-1" => Some(Self::Resilience8),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Baseline => "baseline",
+            Self::Resilience4 => "4-4-1",
+            Self::Resilience8 => "8-4-1",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct TransferPolicy {
     pub raw_bytes: usize,
     pub inflight: usize,
@@ -29,6 +58,37 @@ impl TransferPolicy {
             // Airspy 16-bit real input at 2x IQ rate becomes CF32 at 2x bytes.
             bridge_blocks: BRIDGED_CF32_BYTES / (raw_bytes * 2),
         })
+    }
+
+    /// Larger profiles are explicitly limited to the reviewed 256 KiB transfer.
+    /// No arbitrary byte/count input, environment setting or production override.
+    #[cfg(any(test, feature = "transfer-probe"))]
+    pub fn diagnostic(kib: usize, profile: PayloadProfile) -> Option<Self> {
+        let mut policy = Self::candidate(kib)?;
+        match profile {
+            PayloadProfile::Baseline => {}
+            PayloadProfile::Resilience4 | PayloadProfile::Resilience8 => {
+                if kib != PRODUCTION_AIRSPY_KIB {
+                    return None;
+                }
+                policy.inflight = match profile {
+                    PayloadProfile::Resilience4 => 16,
+                    PayloadProfile::Resilience8 => 32,
+                    PayloadProfile::Baseline => unreachable!("handled above"),
+                };
+                policy.raw_queue_blocks = 16;
+            }
+        }
+        Some(policy)
+    }
+
+    #[cfg(any(test, feature = "transfer-probe"))]
+    pub fn payload_bytes(self) -> (usize, usize, usize) {
+        (
+            self.raw_bytes * self.inflight,
+            self.raw_bytes * self.raw_queue_blocks,
+            self.raw_bytes * 2 * self.bridge_blocks,
+        )
     }
 
     pub fn config(self, format: IqFormat) -> StreamConfig {
@@ -74,6 +134,38 @@ mod tests {
         }
         for kib in [0, 32, 65, 512, usize::MAX] {
             assert!(TransferPolicy::candidate(kib).is_none());
+        }
+    }
+
+    #[test]
+    fn diagnostic_profiles_have_explicit_fixed_byte_and_count_bounds() {
+        for (name, inflight, queued, extra) in [
+            ("baseline", 4, 8, 0),
+            ("4-4-1", 16, 16, 5_242_880),
+            ("8-4-1", 32, 16, 9_437_184),
+        ] {
+            let profile = PayloadProfile::parse(name).unwrap();
+            assert_eq!(profile.name(), name);
+            let p = TransferPolicy::diagnostic(256, profile).unwrap();
+            assert_eq!(
+                (p.raw_bytes, p.inflight, p.raw_queue_blocks, p.bridge_blocks),
+                (262_144, inflight, queued, 2)
+            );
+            let (usb, raw, bridge) = p.payload_bytes();
+            assert_eq!(
+                (usb, raw, bridge),
+                (262_144 * inflight, 262_144 * queued, 1_048_576)
+            );
+            assert_eq!(usb + raw + bridge, 4_194_304 + extra);
+            assert!(usb <= 8_388_608 && raw <= 4_194_304);
+            if profile != PayloadProfile::Baseline {
+                for kib in [0, 64, 128, 255, 257, 512, usize::MAX] {
+                    assert!(TransferPolicy::diagnostic(kib, profile).is_none());
+                }
+            }
+        }
+        for value in ["", "4", "16-4-1", "8-8-1", "4-4-2", "BASELINE"] {
+            assert!(PayloadProfile::parse(value).is_none());
         }
     }
 
