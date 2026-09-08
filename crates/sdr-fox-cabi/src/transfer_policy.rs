@@ -1,5 +1,6 @@
-//! Internal transport candidates. Root's controlled physical comparison chose
-//! 256 KiB with the existing synthesis bridge; see the transfer CPU receipt.
+//! Root-selected macOS Airspy transport policy and fixed diagnostic baselines.
+//! The controlled resilience comparison chose4/4/1MiB at256KiB with synthesis;
+//! see docs/MACOS_AIRSPY_RESILIENCE.md for evidence and remaining limits.
 
 use sdr_fox_core::{IqFormat, StreamConfig};
 
@@ -9,7 +10,7 @@ pub(super) const BRIDGED_CF32_BYTES: usize = 1_048_576;
 const PRODUCTION_AIRSPY_KIB: usize = 256;
 
 #[cfg(any(test, feature = "transfer-probe"))]
-/// Fixed diagnostic payload budgets; these never affect production selection.
+/// Fixed diagnostic payload selectors cannot override production selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum PayloadProfile {
     Baseline,
@@ -60,6 +61,16 @@ impl TransferPolicy {
         })
     }
 
+    /// Root-selected configuration, shared with its physical diagnostic arm.
+    /// Keep candidate()'s original1/2/1MiB budgets as the diagnostic baseline.
+    fn resilience4() -> Self {
+        Self {
+            inflight: 16,
+            raw_queue_blocks: 16,
+            ..Self::candidate(PRODUCTION_AIRSPY_KIB).expect("reviewed static policy")
+        }
+    }
+
     /// Larger profiles are explicitly limited to the reviewed 256 KiB transfer.
     /// No arbitrary byte/count input, environment setting or production override.
     #[cfg(any(test, feature = "transfer-probe"))]
@@ -71,12 +82,10 @@ impl TransferPolicy {
                 if kib != PRODUCTION_AIRSPY_KIB {
                     return None;
                 }
-                policy.inflight = match profile {
-                    PayloadProfile::Resilience4 => 16,
-                    PayloadProfile::Resilience8 => 32,
-                    PayloadProfile::Baseline => unreachable!("handled above"),
-                };
-                policy.raw_queue_blocks = 16;
+                policy = Self::resilience4();
+                if profile == PayloadProfile::Resilience8 {
+                    policy.inflight = 32;
+                }
             }
         }
         Some(policy)
@@ -107,7 +116,7 @@ pub(super) fn production_policy(airspy: bool) -> TransferPolicy {
 
 fn policy_for_platform(macos: bool, airspy: bool) -> TransferPolicy {
     if macos && airspy {
-        TransferPolicy::candidate(PRODUCTION_AIRSPY_KIB).expect("reviewed static policy")
+        TransferPolicy::resilience4()
     } else {
         let config = StreamConfig::default();
         TransferPolicy {
@@ -182,8 +191,15 @@ mod tests {
         }
         let selected = policy_for_platform(true, true);
         assert_eq!(selected.raw_bytes, 262_144);
-        assert_eq!(selected.inflight, 4);
-        assert_eq!(selected.raw_queue_blocks, 8);
+        assert_eq!(selected.inflight, 16);
+        assert_eq!(selected.raw_queue_blocks, 16);
         assert_eq!(selected.bridge_blocks, 2);
+        assert_eq!(
+            selected,
+            TransferPolicy::diagnostic(256, PayloadProfile::Resilience4).unwrap()
+        );
+        assert_eq!(selected.payload_bytes(), (4_194_304, 4_194_304, 1_048_576));
+        let baseline = TransferPolicy::diagnostic(256, PayloadProfile::Baseline).unwrap();
+        assert_eq!(baseline.payload_bytes(), (1_048_576, 2_097_152, 1_048_576));
     }
 }

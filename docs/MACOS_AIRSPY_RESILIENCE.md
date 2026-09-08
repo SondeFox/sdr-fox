@@ -1,8 +1,8 @@
 # Bounded macOS Airspy resilience diagnostics
 
-This change adds opt-in fixed payload budgets to the existing physical probe.
-Production macOS Airspy remains at 256 KiB raw transfers, four inflight transfers,
-eight raw queue blocks and two synthesis bridge blocks. Other receiver/platform
+Root's controlled comparison selected the4/4/1MiB profile for the local production
+candidate. Production macOS Airspy uses256KiB raw transfers,16inflight transfers,
+16raw queue blocks and two synthesis bridge blocks. Other receiver/platform
 policies and the global `StreamConfig` defaults are unchanged. No environment
 variable or public C ABI selector changes production behavior.
 
@@ -27,6 +27,11 @@ queues cover 52.4288/104.8576 ms respectively. Host-observed reaping/read gaps
 of roughly 99–181 ms motivate the experiment. Four MiB cannot cover a 181 ms
 reaping pause; eight MiB only adds nominal coverage. Queue and ring coverage
 are different stages and must not be added as a guarantee against hardware loss.
+An8MiB inflight ring can reap a burst larger than the4MiB raw queue when the
+consumer is stalled. While reaping continues, a paused consumer has only the
+available raw queue plus bridge capacity in their respective byte domains. The
+1MiB CF32 bridge covers13.1072ms at80MB/s, giving65.536ms baseline or117.9648ms
+expanded queued-only coverage when empty, excluding transient in-use buffers.
 
 These are reserved stage payload budgets, not process RSS limits. They exclude
 allocation overhead, the worker's current raw block, synthesis scratch/output,
@@ -110,7 +115,42 @@ and retention of an owned clear-operation lease until its original completion.
 C ABI tests cover both new profiles' exact suffix copies, metadata, timeout,
 pending read cancellation and saturated synthesis bridge shutdown.
 
-No physical result or production winner is established by this software change.
-The coordinator records matched hardware/RSS/CPU results and selects any later
-production change only after independent review. Additional budgets beyond
-8/4/1 MiB require a separate proposal.
+## Root-controlled physical selection
+
+On2026-09-08 the coordinator ran six counterbalanced60s trials on the attached
+Airspy One/macOS host after the user confirmed the shared-hub iPhone backup had
+finished. Freshly verified controls were10MS/s,404MHz,Quiet Rural manual gains,
+BiasOFF,PPM0; the app was stopped and quit, no worker builds ran, and QoS/core
+placement was unchanged. Order:baseline,4/4/1,8/4/1,8/4/1,4/4/1,baseline.
+
+| Profile | Timed C ABI IQ/s (million) | Process CPU | Steady RSS | Stop/join |
+|---|---|---|---|---|
+| Baseline | 9.9870–9.9982 | 14.71–15.33% | 15.4–15.7MiB | 0.928–1.558ms |
+| 4/4/1 | 9.9966–9.9982 | 15.02–15.25% | 22.2–23.5MiB | 1.059–1.315ms |
+| 8/4/1 | 9.9975–9.9977 | 15.32–15.37% | 30.7–31.5MiB | 1.315–1.934ms |
+
+All six runs had zero observed source drops,timeouts,read errors,failed transfers
+and unknown-overrun events. Baseline-a nevertheless fell outside the nominal
+0.1%delivery range and reported74.4ms USB handling/81.9ms read gaps; baseline-b
+was nominal. Preserve both outcomes: this is limited evidence, not a causal
+hardware-loss proof. Both4/4/1 runs reached raw-queue highwater9blocks, beyond
+the previous8block capacity. Root selected4/4/1 for modest resilience headroom;
+8/4/1 offered no observed delivery advantage and used more RSS. CPU intervals
+overlap, so no transport CPU improvement or statistically proven cost is claimed.
+
+Exact measured source was845662c503aa251b1db2083ebfe3e5b79422d4c5; probe SHA-256
+b0f47a25c90243a2be0c45ec6488ffb8f5ee33b150761be5d4f4b5d34b4023f0.
+The private consumer decision receipt is
+`macos/build/performance/transport-physical-v7/root-selection.json`, SHA-256
+`6d4b9da4423b38971e142e34cda6b1c48e56bc1e4ae19889383c5f69178d4c54`.
+It binds all six raw receipts, external CPU/RSS measurements and limitations.
+The followup changes only the production selector to the same tested4/4/1
+configuration; an assertion binds production to that diagnostic profile while
+retaining the original diagnostic baseline. Physical results carry as
+same-configuration evidence, not as a new measured source or assembled-app run.
+
+Historical99–181ms busy-hub gaps remain;4MiB inflight cannot cover every such
+pause, and hardware loss counters remain unavailable. Final integrated signed-app
+acceptance owns source/native/joint delivery,full-rate coverage/recording,latency
+and the approximately30%whole-app CPU target, which remains unachieved here.
+Additional budgets beyond8/4/1MiB require a separate proposal.
