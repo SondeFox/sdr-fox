@@ -199,30 +199,6 @@ fn is_clip(v: u16) -> bool {
     (i32::from(v) - 2048).abs() >= 2044
 }
 
-/// Count rail hits over an optional already-assembled container plus every
-/// full 16-bit container in `body` — exactly the samples `route_containers`
-/// decodes (a trailing odd byte is excluded in both). Branch-free so LLVM
-/// vectorizes it; measured cheaper than threading the count through the
-/// FP-serialized routing loop.
-///
-/// The rail test is a single unsigned compare: for a 12-bit `v`, `is_clip`'s
-/// `|v − 2048| >= 2044` holds exactly when `v <= 4` or `v >= 4092`, i.e.
-/// `v.wrapping_sub(5) >= 4087` (the low side wraps above the high threshold).
-/// Blocks accumulate into a `u32` lane (block length bounds it) so the inner
-/// loop needs no widening.
-fn count_clips(pending_head: Option<u16>, body: &[u8]) -> u64 {
-    let mut clips = pending_head.map_or(0, |v| u64::from(is_clip(v)));
-    for block in body.chunks(8192) {
-        let mut in_block = 0u32;
-        for chunk in block.chunks_exact(2) {
-            let v = u16::from_le_bytes([chunk[0], chunk[1]]) & 0x0fff;
-            in_block += u32::from(v.wrapping_sub(5) >= 4087);
-        }
-        clips += u64::from(in_block);
-    }
-    clips
-}
-
 /// Whether to advance the DC blocker with a fused multiply-add.
 ///
 /// **This flag changes the output bits, so it is deliberately a property of
@@ -557,11 +533,9 @@ impl IqSynthesizer {
                 return out;
             }
         }
-        // Raw-domain clip telemetry (G6), counted over exactly the containers
-        // the router below decodes. Kept as its own pass so the branch-free
-        // count vectorizes instead of serializing the FP routing loop.
-        self.last_clips = count_clips(pending_head, &raw[offset..]);
-        self.route_containers::<FUSED>(pending_head, &raw[offset..]);
+        // Count raw ADC rails at the same masked containers the router uses.
+        // A pending or partial container is counted only when completed.
+        self.last_clips = self.route_containers::<FUSED>(pending_head, &raw[offset..]);
         self.run_polyphase(phi);
 
         // The polyphase rail is I when `mid` is odd, Q when it is even.
@@ -587,25 +561,32 @@ impl IqSynthesizer {
     /// already-assembled container), DC-block each sample, fold the
     /// conjugated fs/4 mixer sign in, and fill the prepared parity-split
     /// spans. A trailing odd byte is retained for the next call.
-    fn route_containers<const FUSED: bool>(&mut self, pending_head: Option<u16>, body: &[u8]) {
+    fn route_containers<const FUSED: bool>(
+        &mut self,
+        pending_head: Option<u16>,
+        body: &[u8],
+    ) -> u64 {
+        let mut clips = 0u64;
         let mut dc = self.dc_average;
         let mut phase = self.mixer_phase;
         let mid_odd = self.mid_odd;
         let mut poly = self.poly_scratch[self.poly_carry.len()..].iter_mut();
         let mut delay = self.delay_scratch[self.delay_carry.len()..].iter_mut();
-        let route_single = |v: u16,
-                            phase: &mut usize,
-                            dc: &mut f32,
-                            poly: &mut std::slice::IterMut<'_, f32>,
-                            delay: &mut std::slice::IterMut<'_, f32>| {
-            let folded = MIXER_SIGN[*phase] * decode_dc::<FUSED>(v, dc);
-            if (*phase & 1 == 0) == mid_odd {
-                *poly.next().unwrap() = folded;
-            } else {
-                *delay.next().unwrap() = folded;
-            }
-            *phase = (*phase + 1) & 3;
-        };
+        let mut route_single =
+            |v: u16,
+             phase: &mut usize,
+             dc: &mut f32,
+             poly: &mut std::slice::IterMut<'_, f32>,
+             delay: &mut std::slice::IterMut<'_, f32>| {
+                clips += u64::from(is_clip(v));
+                let folded = MIXER_SIGN[*phase] * decode_dc::<FUSED>(v, dc);
+                if (*phase & 1 == 0) == mid_odd {
+                    *poly.next().unwrap() = folded;
+                } else {
+                    *delay.next().unwrap() = folded;
+                }
+                *phase = (*phase + 1) & 3;
+            };
         if let Some(v) = pending_head {
             route_single(v, &mut phase, &mut dc, &mut poly, &mut delay);
         }
@@ -620,7 +601,9 @@ impl IqSynthesizer {
             );
             offset = 2;
         }
-        let mut pairs = body[offset..].chunks_exact(4);
+        let paired = &body[offset..];
+        let pair_count = paired.len() / 4;
+        let (pairs, remainder) = paired.split_at(pair_count * 4);
         let mut s = MIXER_SIGN[phase];
         // Selecting the destinations once makes both filter modes share the
         // same pair loop without per-sample allocation checks. DC remains
@@ -630,23 +613,30 @@ impl IqSynthesizer {
         } else {
             (delay.into_slice(), poly.into_slice())
         };
-        let pair_count = pairs.len();
         let (even_pairs, even_tail) = even.split_at_mut(pair_count);
         let odd_pairs = &mut odd[..pair_count];
-        for (bytes, (even, odd)) in pairs.by_ref().zip(even_pairs.iter_mut().zip(odd_pairs)) {
-            let x0 = decode_dc::<FUSED>(u16::from_le_bytes([bytes[0], bytes[1]]) & 0x0fff, &mut dc);
-            let x1 = decode_dc::<FUSED>(u16::from_le_bytes([bytes[2], bytes[3]]) & 0x0fff, &mut dc);
-            *even = s * x0;
-            *odd = s * x1;
+        for pair in 0..pair_count {
+            let at = pair * 4;
+            // Explicit little-endian assembly is safe for unaligned/odd-start
+            // input slices. The upper four bits of each container are ignored.
+            let bytes: &[u8; 4] = pairs[at..at + 4].try_into().unwrap();
+            let packed = u32::from_le_bytes(*bytes);
+            let v0 = (packed & 0x0fff) as u16;
+            let v1 = ((packed >> 16) & 0x0fff) as u16;
+            clips += u64::from(is_clip(v0)) + u64::from(is_clip(v1));
+            // The DC recurrence stays strictly v0 then v1, with its existing
+            // target-selected arithmetic and unchanged sign multiplications.
+            let x0 = decode_dc::<FUSED>(v0, &mut dc);
+            let x1 = decode_dc::<FUSED>(v1, &mut dc);
+            even_pairs[pair] = s * x0;
+            odd_pairs[pair] = s * x1;
             s = -s;
         }
         phase = (phase + 2 * (pair_count & 1)) & 3;
-        let remainder = pairs.remainder();
         if remainder.len() >= 2 {
-            let x = decode_dc::<FUSED>(
-                u16::from_le_bytes([remainder[0], remainder[1]]) & 0x0fff,
-                &mut dc,
-            );
+            let v = u16::from_le_bytes([remainder[0], remainder[1]]) & 0x0fff;
+            clips += u64::from(is_clip(v));
+            let x = decode_dc::<FUSED>(v, &mut dc);
             even_tail[0] = MIXER_SIGN[phase] * x;
             phase = (phase + 1) & 3;
         }
@@ -655,6 +645,7 @@ impl IqSynthesizer {
         if remainder.len() & 1 == 1 {
             self.pending_low_byte = remainder.last().copied();
         }
+        clips
     }
 
     /// Run the sparse half-band over the parity streams: the packed nonzero
@@ -1408,6 +1399,46 @@ mod tests {
         synth.reset();
         assert_eq!(synth.last_raw_samples(), 0);
         assert_eq!(synth.last_clips(), 0);
+    }
+
+    #[test]
+    fn packed_counter_covers_all_u16_encodings_and_both_positions() {
+        let mut raw = vec![0xa5];
+        raw.extend(
+            (0..=u16::MAX)
+                .flat_map(|v| [v, 2048, 2048, v])
+                .flat_map(u16::to_le_bytes),
+        );
+        let mut synth = IqSynthesizer::new();
+        let _ = synth.synthesize_mini_cf32(&raw[1..]);
+        assert_eq!(synth.last_raw_samples(), 4 * 65_536);
+        // Nine masked rail values per4096, each in16 high-nibble encodings
+        // and in both packed positions. Midpoint2048 never clips.
+        assert_eq!(synth.last_clips(), 9 * 16 * 2);
+    }
+
+    #[test]
+    fn pending_empty_calls_reset_stats_without_advancing_the_sample() {
+        let mut synth = IqSynthesizer::new();
+        let _ = synth.synthesize_mini_cf32(&[0xff]);
+        let before_dc = synth.dc_average.to_bits();
+        let before_phase = synth.mixer_phase;
+        for _ in 0..3 {
+            assert!(synth.synthesize_mini_cf32(&[]).is_empty());
+            assert_eq!(synth.pending_low_byte, Some(0xff));
+            assert_eq!(synth.dc_average.to_bits(), before_dc);
+            assert_eq!(synth.mixer_phase, before_phase);
+            assert_eq!(synth.last_raw_samples(), 0);
+            assert_eq!(synth.last_clips(), 0);
+        }
+        let _ = synth.synthesize_mini_cf32(&[0x0f]);
+        assert_eq!(synth.last_raw_samples(), 1);
+        assert_eq!(synth.last_clips(), 1);
+        assert_eq!(synth.pending_low_byte, None);
+        synth.reset();
+        assert_eq!(synth.last_raw_samples(), 0);
+        assert_eq!(synth.last_clips(), 0);
+        assert_eq!(synth.pending_low_byte, None);
     }
 
     #[test]
