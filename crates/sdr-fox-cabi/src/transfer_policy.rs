@@ -1,6 +1,6 @@
 //! Root-selected macOS Airspy transport policy and fixed diagnostic baselines.
-//! The controlled resilience comparison chose4/4/1MiB at256KiB with synthesis;
-//! see docs/MACOS_AIRSPY_RESILIENCE.md for evidence and remaining limits.
+//! The controlled resilience comparison chose 4/4/1 MiB at 256 KiB with synthesis;
+//! see `docs/MACOS_AIRSPY_RESILIENCE.md` for evidence and remaining limits.
 
 use sdr_fox_core::{IqFormat, StreamConfig};
 
@@ -62,7 +62,7 @@ impl TransferPolicy {
     }
 
     /// Root-selected configuration, shared with its physical diagnostic arm.
-    /// Keep candidate()'s original1/2/1MiB budgets as the diagnostic baseline.
+    /// Keep `candidate()`'s original 1/2/1 MiB budgets as the diagnostic baseline.
     fn resilience4() -> Self {
         Self {
             inflight: 16,
