@@ -87,11 +87,11 @@ streams per attached receiver with repeated 400/406/403.2 MHz tuning and RTL
 1.024/2.4/2.048 MS/s rate cycles. All six windows had zero read timeout and
 zero native drop counter. Bias remained off and samples were discarded.
 
-## Background Airspy transport follow-up
+## Historical background Airspy transport follow-up
 
-The later C-ABI macOS Airspy policy selects 256 KiB raw transfers while retaining
+The earlier C-ABI macOS Airspy policy selected 256 KiB raw transfers while retaining
 the synthesis bridge. Inflight raw, queued raw and queued CF32 payload budgets
-remain 1/2/1 MiB; scratch, active and pending blocks are additional memory.
+were 1/2/1 MiB; scratch, active and pending blocks are additional memory.
 The app's aligned 128 KiB C reads retain and drain larger CF32 block suffixes.
 Detailed counterbalanced physical observations and the rejected direct-mode
 experiment are in [the transfer record](MACOS_AIRSPY_TRANSFER_CPU.md).
@@ -102,3 +102,20 @@ The separate [safe kernel work](MACOS_AIRSPY_KERNEL_CPU.md) preserves sample
 values/order, clipping calibration and streaming state against c927 source.
 Integrated-source physical confirmation and consumer app/decoder/recording
 acceptance remain separate evidence in the consumer's atomic adoption receipt.
+
+## Current bounded resilience selection
+
+The current production policy uses 256 KiB with 4/4/1 MiB inflight/raw/CF32
+payload budgets (16/16/2 blocks), retaining the synthesis bridge. Root selected
+it after six counterbalanced 60-second baseline/4-4-1/8-4-1 physical runs after
+the user confirmed the competing backup had finished. All six observed software
+drop/error/timeout counts were zero. The selected pair delivered about
+9.9966–9.9982 MS/s, 22.2–23.5 MiB process RSS and 1.06–1.31 ms stop times.
+Standalone CPU was about 15.02–15.25%; this is not a consumer-app CPU result.
+The 8/4/1 profile used more memory without an established advantage.
+
+The measured diagnostic probe and selected production source/probe are distinct
+artifacts, mapped explicitly in MACOS_AIRSPY_RESILIENCE.md and the consumer's
+root-selection receipt. Earlier 1/2/1 failures and 99–181 ms gaps remain evidence;
+these finite new trials establish neither universal gap coverage nor hardware
+losslessness. Combined-source and signed-app acceptance remain separate.

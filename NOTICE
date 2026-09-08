@@ -124,3 +124,13 @@ MIT OR Apache-2.0 license choices. See docs/MACOS_AIRSPY_KERNEL_CPU.md and
 docs/MACOS_AIRSPY_TRANSFER_CPU.md for exact original source revisions, reference
 copy terms and bounded evidence. No new external code/dependency is added;
 existing third-party acknowledgements and redistribution obligations remain.
+
+First-party packed statistics and resilience additions (2026-09-08)
+----------------------------------------------------------------
+Safe packed ADC extraction, exact raw statistics fusion, fixed diagnostic
+payload profiles and synthetic tests extend reviewed c89f580 source. They are
+first-party MIT OR Apache-2.0 work, with no external implementation or new
+dependency. The selected macOS Airspy policy is 256 KiB and 4/4/1 MiB payload;
+its bounded results do not guarantee hardware losslessness or a CPU target.
+See docs/MACOS_AIRSPY_PACKED_STATS_CPU.md and docs/MACOS_AIRSPY_RESILIENCE.md;
+preserve existing license texts, notices and redistribution obligations.

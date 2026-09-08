@@ -80,3 +80,22 @@ source implementation or quarantined legacy source was consulted for it.
 Generic R828D behavior remains at the prior 16 MHz reference. Physical tests
 established that the V4 changed from PLL failure to IQ streaming at UHF; RF
 sensitivity and complete V4 switched-filter/HF support are not established.
+
+## 2026-09-08 packed statistics and resilience integration
+
+First-party safe Rust packed ADC routing/statistics and fixed macOS Airspy
+payload profiles extend the reviewed c89f580 baseline. Frozen worker sources
+7e50fdd33fa7cbf23add05b96835e5281746aabd and
+c1d3a88ea844572fb59e302193b12289e8fc1690 were independently reviewed before
+separate integration. The selected 4/4/1 MiB policy preserves 256 KiB transfers
+and the bridge; no rate, dependency, nusb, public ABI or QoS change is included.
+The packed kernel retains exact DC/filter/output order and per-call statistics.
+
+New source, synthetic tests and diagnostic harnesses are independently authored
+under this repository's MIT OR Apache-2.0 terms. No legacy/GPL/research source,
+external implementation, private capture or copied graph machinery was used.
+Historical and c89 reference copies retain their original licenses and stay in
+ignored verification output. Exact worker origins, measured artifacts, recovery
+incidents and limits are in MACOS_AIRSPY_PACKED_STATS_CPU.md and
+MACOS_AIRSPY_RESILIENCE.md. Atomic consumer outputs require one frozen reviewed
+combined revision; no publication or whole-app CPU acceptance is implied.

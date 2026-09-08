@@ -80,21 +80,27 @@ Existing integer selectors and original-format stream reads remain compatible.
 
 ## Current macOS Airspy performance integration
 
-The reviewed clean-history c927ba9 baseline is extended by first-party safe
-Airspy synthesis changes and a measured C-ABI transport policy. macOS Airspy
-uses 256 KiB raw transfers, four inflight transfers, eight raw delivery blocks
-and two CF32 bridge blocks. The synthesis bridge remains enabled; direct
-receive mode is confined to the explicit diagnostic probe. Global StreamConfig
-defaults, other platforms/receivers, output formats, calibration, QoS and nusb
-0.2.7 remain unchanged. Safe FIR/routing changes retain current-baseline sample
-bits and streaming state in the bounded differential tests.
+The reviewed c89f580c369b86a874e24669f86779eccb76e9c3 baseline is extended by
+independently reviewed packed routing/statistics source
+7e50fdd33fa7cbf23add05b96835e5281746aabd and resilience source
+c1d3a88ea844572fb59e302193b12289e8fc1690. The separate integration combines
+only these frozen source outputs after all four consumer workers completed.
 
-Source work was coordinated by the consumer's existing graph using explicit
-logical resource leases and separate worktrees. No graph/tool state was copied
-into this repository. The separate integration combines worker revisions
-359fcab1b0a2ef93f68b0af66100aab596f85f97 and
-9da258863f3ed90bc871e03e5b0cd00ab2715ec1 after independent review.
-Actual integrated-source build/hardware evidence and atomic Mac/header/Kotlin/
-both-JNI adoption belong to the consumer receipt and
-`SondeFox/docs/SDR_FOX_INTEGRATION.md`; local source or component success does
-not imply publication, clean-host reproduction or signed-app acceptance.
+macOS Airspy uses 256 KiB raw transfers, 16 inflight transfers, 16 raw delivery
+blocks and two CF32 bridge blocks (4/4/1 MiB nominal payload, +5 MiB). The bridge
+remains enabled. The historical 1/2/1 and diagnostic 8/4/1 profiles remain
+explicit controls, never environment overrides of production. The chosen
+profile passed bounded worker-source trials; it cannot guarantee absorption
+of every historical 99–181 ms gap or establish hardware losslessness.
+
+Packed routing/statistics preserve sequential v0→v1 DC/FMA, all output formats,
+clipping and per-call carry/reset behavior. Cargo.lock, unmodified nusb 0.2.7,
+other receiver/platform policies, rates, calibration and QoS are unchanged.
+See MACOS_AIRSPY_PACKED_STATS_CPU.md and MACOS_AIRSPY_RESILIENCE.md.
+
+The consumer's sole graph coordinates isolated worktrees through declared
+logical resources; no graph/tool state enters this repository. Actual combined
+source, tests, artifact hashes and same-revision Mac/header/Kotlin/both-JNI
+adoption belong to the consumer receipt. Source and component success are not
+publication, clean-host reproduction, final signed-app or approximately 30% CPU
+acceptance. Prior successful and failed physical measurements remain historical.

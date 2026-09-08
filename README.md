@@ -135,15 +135,23 @@ The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.
 Existing integer selectors and original-format stream reads remain compatible.
 
-## macOS Airspy background processing (2026-09-07)
+## Current macOS Airspy background processing
 
-The C ABI now selects 256 KiB raw transfers for macOS Airspy while keeping the
-existing synthesis bridge and fixed 1/2/1 MiB inflight/raw-delivery/CF32-bridge
-payload budgets. Safe synthesis bookkeeping and the default fixed FIR tile
-preserve the current sample arithmetic and all output formats. Global Rust
-stream defaults and other receiver/platform policies remain unchanged.
+macOS Airspy uses 256 KiB raw transfers with 16 inflight transfers, 16 queued
+raw blocks and two queued CF32 bridge blocks: fixed 4/4/1 MiB payload budgets.
+The synthesis bridge stays enabled. The additional 5 MiB nominal payload budget
+was selected from bounded physical comparisons; it is not a guarantee against
+all host stalls or hardware loss. Other receiver/platform defaults are unchanged.
 
-The measured choice, source-only probe limits and exact-output tests are in
-[`docs/MACOS_AIRSPY_TRANSFER_CPU.md`](docs/MACOS_AIRSPY_TRANSFER_CPU.md) and
-[`docs/MACOS_AIRSPY_KERNEL_CPU.md`](docs/MACOS_AIRSPY_KERNEL_CPU.md). These
-component results do not establish the consumer app's CPU or energy target.
+Safe packed ADC routing fuses exact raw clipping statistics while preserving
+sequential DC arithmetic, filter/output values and streaming carry/reset state.
+No dependency, nusb version, radio rate, public ABI or QoS change is included.
+The exact source/test limits and rejected alternatives are in
+[packed statistics](docs/MACOS_AIRSPY_PACKED_STATS_CPU.md) and
+[transport resilience](docs/MACOS_AIRSPY_RESILIENCE.md).
+
+The earlier [transport record](docs/MACOS_AIRSPY_TRANSFER_CPU.md) preserves its
+historical 1/2/1 MiB measurements. The [kernel record](docs/MACOS_AIRSPY_KERNEL_CPU.md)
+preserves the earlier FIR work. Consumer integration must build Mac/header,
+Kotlin binding and both Android JNI artifacts from one reviewed combined source;
+component results do not establish a whole-app CPU or energy result.
