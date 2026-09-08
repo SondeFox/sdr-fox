@@ -77,3 +77,24 @@ whole-radio feature acceptance. Sources and test scope are in
 The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.
 Existing integer selectors and original-format stream reads remain compatible.
+
+## Current macOS Airspy performance integration
+
+The reviewed clean-history c927ba9 baseline is extended by first-party safe
+Airspy synthesis changes and a measured C-ABI transport policy. macOS Airspy
+uses 256 KiB raw transfers, four inflight transfers, eight raw delivery blocks
+and two CF32 bridge blocks. The synthesis bridge remains enabled; direct
+receive mode is confined to the explicit diagnostic probe. Global StreamConfig
+defaults, other platforms/receivers, output formats, calibration, QoS and nusb
+0.2.7 remain unchanged. Safe FIR/routing changes retain current-baseline sample
+bits and streaming state in the bounded differential tests.
+
+Source work was coordinated by the consumer's existing graph using explicit
+logical resource leases and separate worktrees. No graph/tool state was copied
+into this repository. The separate integration combines worker revisions
+359fcab1b0a2ef93f68b0af66100aab596f85f97 and
+9da258863f3ed90bc871e03e5b0cd00ab2715ec1 after independent review.
+Actual integrated-source build/hardware evidence and atomic Mac/header/Kotlin/
+both-JNI adoption belong to the consumer receipt and
+`SondeFox/docs/SDR_FOX_INTEGRATION.md`; local source or component success does
+not imply publication, clean-host reproduction or signed-app acceptance.

@@ -66,3 +66,17 @@ whole-radio feature acceptance. Sources and test scope are in
 The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.
 Existing integer selectors and original-format stream reads remain compatible.
+
+## First-party Airspy performance work (2026-09-07)
+
+Kernel and transport additions use only reviewed canonical c927ba987f2b9e1da7a50f1d9debca92d9207447
+source plus newly authored safe Rust and synthetic tests. Original worker
+revisions359fcab1b0a2ef93f68b0af66100aab596f85f97 and
+9da258863f3ed90bc871e03e5b0cd00ab2715ec1 remain in this same clean lineage.
+Cargo.lock and the published nusb0.2.7 dependency are unchanged. No external
+implementation, dependency, fixture or copied graph machinery was introduced.
+Reference-source copies used by the CF32 comparator retain MIT OR Apache-2.0
+terms and stay in local temporary verification directories. Origins and
+physical/timing limits are documented in MACOS_AIRSPY_KERNEL_CPU.md and
+MACOS_AIRSPY_TRANSFER_CPU.md. Atomic consumer artifacts must come from one
+reviewed integrated source revision; do not mix worker outputs.

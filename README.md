@@ -134,3 +134,16 @@ whole-radio feature acceptance. Sources and test scope are in
 The C ABI adds stable receiver enumeration/open, applied rate, queried sample
 rates/gains, stage controls, IF bandwidth and reference oscillator access.
 Existing integer selectors and original-format stream reads remain compatible.
+
+## macOS Airspy background processing (2026-09-07)
+
+The C ABI now selects 256 KiB raw transfers for macOS Airspy while keeping the
+existing synthesis bridge and fixed 1/2/1 MiB inflight/raw-delivery/CF32-bridge
+payload budgets. Safe synthesis bookkeeping and the default fixed FIR tile
+preserve the current sample arithmetic and all output formats. Global Rust
+stream defaults and other receiver/platform policies remain unchanged.
+
+The measured choice, source-only probe limits and exact-output tests are in
+[`docs/MACOS_AIRSPY_TRANSFER_CPU.md`](docs/MACOS_AIRSPY_TRANSFER_CPU.md) and
+[`docs/MACOS_AIRSPY_KERNEL_CPU.md`](docs/MACOS_AIRSPY_KERNEL_CPU.md). These
+component results do not establish the consumer app's CPU or energy target.
