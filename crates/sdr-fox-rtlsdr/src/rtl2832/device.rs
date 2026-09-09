@@ -73,6 +73,9 @@ pub struct RtlSdr {
     info: DeviceInfo,
     transport: Box<dyn Transport>,
     tuner: Box<dyn Tuner>,
+    /// Selected alongside the tuner by the strict open-time board predicate.
+    /// Retained through recovery; generic constructors never assume this board.
+    blog_v4: bool,
     /// Shared hardware-session lifetime. Every stream started from this
     /// device co-owns it; the RTL2832U power-down (`deinit_baseband`) runs
     /// when the LAST co-owner — this handle or any stream that outlived it —
@@ -140,6 +143,7 @@ impl RtlSdr {
             info,
             transport,
             tuner,
+            blog_v4: false,
             session,
             sample_rate: 2_048_000,
             center_freq: None,
@@ -159,6 +163,11 @@ impl RtlSdr {
     #[must_use]
     pub fn tuner(&self) -> &dyn Tuner {
         self.tuner.as_ref()
+    }
+
+    pub(super) fn with_blog_v4_routing(mut self, enabled: bool) -> Self {
+        self.blog_v4 = enabled;
+        self
     }
 
     /// Apply the configured upconverter offset (if any) to the true RF frequency,
@@ -319,6 +328,13 @@ impl SdrDevice for RtlSdr {
 
     fn set_frequency(&mut self, hz: u64) -> Result<(), SdrError> {
         let sdr_hz = self.sdr_freq(hz);
+        if self.blog_v4 {
+            let plan = crate::tuners::blog_v4::RfPlan::for_sma_frequency(sdr_hz);
+            // GPIO 5 is part of the observed board route. Read/modify/write
+            // preserves the independent bias-T on GPIO 0 and every other pin.
+            baseband::set_gpio_output(self.transport.as_mut(), 5)?;
+            baseband::set_gpio_bit(self.transport.as_mut(), 5, plan.gpio5_high)?;
+        }
         self.with_i2c_repeater(|t, tuner| {
             let mut bus = RtlI2cBus::for_tuner(t, tuner.kind());
             tuner.set_freq(&mut bus, sdr_hz).map_err(SdrError::Tuner)
@@ -754,6 +770,188 @@ mod tests {
     use super::*;
     use sdr_fox_core::{IqBlock, IqFormat, IqSamples, StreamSink, TunerBus, TunerError};
     use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct RfControlState {
+        gpio: [u8; 5],
+        tuner: [u8; 32],
+        writes: Vec<(u16, u16, Vec<u8>)>,
+        fail_gpio_once: bool,
+    }
+
+    struct RfControlTransport(Arc<Mutex<RfControlState>>);
+
+    impl Transport for RfControlTransport {
+        fn control_in(
+            &mut self,
+            request: &sdr_fox_core::ControlRequest,
+        ) -> Result<Vec<u8>, SdrError> {
+            let state = self.0.lock().unwrap();
+            let mut bytes = vec![0; request.data.len()];
+            if request.index == 0x200 && (0x3000..=0x3004).contains(&request.value) {
+                bytes[0] = state.gpio[usize::from(request.value - 0x3000)];
+            } else if request.index == 0x600 && request.value == 0x74 {
+                // Wire-order R828D status: locked, centered VCO fine tune 1.
+                if bytes.len() > 2 {
+                    bytes[2] = 0x02;
+                }
+                if bytes.len() > 4 {
+                    bytes[4] = 0x08;
+                }
+            }
+            Ok(bytes)
+        }
+
+        fn control_out(
+            &mut self,
+            request: &sdr_fox_core::ControlRequest,
+        ) -> Result<usize, SdrError> {
+            let mut state = self.0.lock().unwrap();
+            if request.index == 0x210 && request.value == 0x3001 && state.fail_gpio_once {
+                state.fail_gpio_once = false;
+                return Err(SdrError::Transport("authored GPIO failure".into()));
+            }
+            state
+                .writes
+                .push((request.value, request.index, request.data.clone()));
+            if request.index == 0x210 && (0x3000..=0x3004).contains(&request.value) {
+                state.gpio[usize::from(request.value - 0x3000)] = request.data[0];
+            } else if request.index == 0x610 && request.value == 0x74 && request.data.len() > 1 {
+                let start = usize::from(request.data[0]);
+                for (index, byte) in request.data[1..].iter().enumerate() {
+                    state.tuner[start + index] = *byte;
+                }
+            }
+            Ok(request.data.len())
+        }
+
+        fn bulk_read(&mut self, _: u8, _: usize, _: u32) -> Result<Vec<u8>, SdrError> {
+            Err(SdrError::Unsupported("control-only test".into()))
+        }
+
+        fn start_bulk_stream(
+            &mut self,
+            _: u8,
+            _: usize,
+            _: usize,
+            _: usize,
+        ) -> Result<sdr_fox_core::StreamHandle, SdrError> {
+            Err(SdrError::Unsupported("control-only test".into()))
+        }
+
+        fn boxed_clone(&self) -> Box<dyn Transport> {
+            Box::new(Self(Arc::clone(&self.0)))
+        }
+    }
+
+    fn rf_test_device(blog_v4: bool) -> (RtlSdr, Arc<Mutex<RfControlState>>) {
+        let state = Arc::new(Mutex::new(RfControlState::default()));
+        // Include bias GPIO 0 and unrelated pins in every GPIO image.
+        state.lock().unwrap().gpio = [0, 0x99, 0, 0x49, 0xe7];
+        let tuner = if blog_v4 {
+            crate::tuners::r82xx::R82xx::for_blog_v4()
+        } else {
+            crate::tuners::r82xx::R82xx::new(TunerKind::R828D)
+        };
+        let device = RtlSdr::new(
+            DeviceInfo {
+                tuner: Some(TunerKind::R828D),
+                ..DeviceInfo::default()
+            },
+            Box::new(RfControlTransport(Arc::clone(&state))),
+            Box::new(tuner),
+        )
+        .with_blog_v4_routing(blog_v4);
+        (device, state)
+    }
+
+    #[test]
+    fn blog_v4_gpio_preserves_bias_and_uses_sma_rf_after_external_conversion() {
+        let (mut device, state) = rf_test_device(true);
+        device.set_frequency(500_000).unwrap();
+        assert_eq!(state.lock().unwrap().gpio, [0, 0x99, 0, 0x69, 0xc7]);
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x20);
+        device
+            .set_upconverter(Some(Upconverter::spyverter()))
+            .unwrap();
+        device.set_frequency(500_000).unwrap();
+        assert_eq!(state.lock().unwrap().gpio[1], 0xb9);
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x60);
+        // Physical SMA RF is 120.5 MHz, outside the 85..112 MHz notch window.
+        assert_eq!(state.lock().unwrap().tuner[0x17] & 0x08, 0x08);
+        assert_eq!(device.center_freq, Some(500_000));
+        device.set_bandwidth(250_000).unwrap();
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x60);
+        assert_eq!(device.center_freq, Some(500_000));
+        device.set_upconverter(None).unwrap();
+        // Existing deferred converter behavior: the next tune changes route.
+        device.set_frequency(28_800_000).unwrap();
+        assert_eq!(state.lock().unwrap().gpio[1] & 0x20, 0x20);
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x60);
+        device.set_frequency(28_799_999).unwrap();
+        assert_eq!(state.lock().unwrap().gpio[1] & 0x20, 0x00);
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x20);
+    }
+
+    #[test]
+    fn blog_v4_gpio_failure_does_not_publish_center_and_retry_reprograms_route() {
+        let (mut device, state) = rf_test_device(true);
+        device.set_frequency(401_500_000).unwrap();
+        state.lock().unwrap().fail_gpio_once = true;
+        assert!(device.set_frequency(500_000).is_err());
+        assert_eq!(device.center_freq, Some(401_500_000));
+        device.set_frequency(500_000).unwrap();
+        assert_eq!(device.center_freq, Some(500_000));
+        assert_eq!(state.lock().unwrap().gpio[1] & 0x20, 0);
+        assert_eq!(state.lock().unwrap().tuner[5] & 0x60, 0x20);
+    }
+
+    #[test]
+    fn blog_v4_reset_replays_route_bandwidth_gain_ppm_and_bias() {
+        for (hz, r05, gpio5) in [
+            (500_000, 0x20, 0),
+            (100_000_000, 0x60, 0x20),
+            (401_500_000, 0, 0x20),
+        ] {
+            let (mut device, state) = rf_test_device(true);
+            device.set_sample_rate(2_400_000).unwrap();
+            device.set_bandwidth(250_000).unwrap();
+            device.set_frequency(hz).unwrap();
+            device.set_gain_mode(GainMode::Manual).unwrap();
+            device.set_gain(GainRequest::Overall(280)).unwrap();
+            device.set_bias_tee(true).unwrap();
+            let gpio_before_ppm = state.lock().unwrap().gpio;
+            let tuner_before_ppm = state.lock().unwrap().tuner;
+            device.set_frequency_correction_ppm(12.0).unwrap();
+            assert_eq!(state.lock().unwrap().gpio, gpio_before_ppm);
+            assert_eq!(state.lock().unwrap().tuner, tuner_before_ppm);
+            // Model the register loss that precedes the production replay path.
+            state.lock().unwrap().gpio = [0; 5];
+            state.lock().unwrap().tuner = [0; 32];
+            device.reinitialize_after_reset().unwrap();
+            let state = state.lock().unwrap();
+            assert_eq!(state.gpio[1] & 0x21, gpio5 | 1);
+            assert_eq!(state.tuner[5] & 0x60, r05);
+            assert_eq!(state.tuner[5] & 0x1f, tuner_before_ppm[5] & 0x1f);
+            assert_eq!(state.tuner[0x0b], tuner_before_ppm[0x0b]);
+            assert_eq!(device.center_freq, Some(hz));
+        }
+    }
+
+    #[test]
+    fn generic_r828d_tuning_never_configures_board_gpio() {
+        let (mut device, state) = rf_test_device(false);
+        let before = state.lock().unwrap().gpio;
+        device.set_frequency(100_000_000).unwrap();
+        device.set_bandwidth(250_000).unwrap();
+        assert_eq!(state.lock().unwrap().gpio, before);
+        assert!(!state
+            .lock()
+            .unwrap()
+            .writes
+            .iter()
+            .any(|(_, index, _)| *index == 0x210));
+    }
 
     /// A synthetic sink that yields one cu8 block then ends.
     struct OneShotCu8 {

@@ -134,3 +134,11 @@ dependency. The selected macOS Airspy policy is 256 KiB and 4/4/1 MiB payload;
 its bounded results do not guarantee hardware losslessness or a CPU target.
 See docs/MACOS_AIRSPY_PACKED_STATS_CPU.md and docs/MACOS_AIRSPY_RESILIENCE.md;
 preserve existing license texts, notices and redistribution obligations.
+sdr-fox Blog V4 RF routing (2026-09-09)
+-------------------------------------
+New V4-only routing code and synthetic tests are independently authored under
+MIT OR Apache-2.0 from reviewed functional USB observations and manufacturer
+hardware facts. The preinstalled GPL measurement instrument is not a product
+dependency; no binary, source, header, disassembly or trace fixture is imported.
+Exact first-party measurement source, subject and aggregate hashes, factual
+references and remaining qualification limits: docs/BLOG_V4_RF_ROUTING.md.

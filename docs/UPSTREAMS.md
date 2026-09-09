@@ -108,3 +108,11 @@ The existing strict V4 clock predicate is unchanged; generic R828D retains
 16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
 C ABI or radio-register change is included. See
 [the implementation and provenance record](ANDROID_USB_IDENTITY.md).
+## V4 RF routing observations (2026-09-09)
+
+The V4-specific RF fields use the independently reviewed first-party SondeFox
+measurement contract at `d0e201dc13acad9d698ca7f3cad9042e128d018f`, not a new code
+upstream. The existing GPL binary was a black-box measurement instrument only;
+none of its source, headers or disassembly was read or imported. No dependency
+or binary distribution changes. Exact measurement hashes, manufacturer factual
+references and source-use limits are in [the RF contract](BLOG_V4_RF_ROUTING.md).

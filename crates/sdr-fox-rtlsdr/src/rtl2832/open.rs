@@ -182,7 +182,8 @@ pub fn open_device(
     configure_demod_for_tuner(transport.as_mut(), tuner_kind)?;
 
     // Build the tuner instance and initialize it.
-    let mut tuner_obj: Box<dyn Tuner> = if tuner_kind == TunerKind::R828D && is_blog_v4(desc) {
+    let blog_v4 = tuner_kind == TunerKind::R828D && is_blog_v4(desc);
+    let mut tuner_obj: Box<dyn Tuner> = if blog_v4 {
         Box::new(crate::tuners::r82xx::R82xx::for_blog_v4())
     } else {
         super::tuner_factory(tuner_kind)?
@@ -190,7 +191,7 @@ pub fn open_device(
     init_tuner(transport.as_mut(), tuner_obj.as_mut())?;
 
     let info = make_info(desc, Some(tuner_kind));
-    Ok(RtlSdr::new(info, transport, tuner_obj))
+    Ok(RtlSdr::new(info, transport, tuner_obj).with_blog_v4_routing(blog_v4))
 }
 
 // Manufacturer-documented EEPROM identity. A missing/edited string must

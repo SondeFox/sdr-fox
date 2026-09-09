@@ -99,3 +99,12 @@ ignored verification output. Exact worker origins, measured artifacts, recovery
 incidents and limits are in MACOS_AIRSPY_PACKED_STATS_CPU.md and
 MACOS_AIRSPY_RESILIENCE.md. Atomic consumer outputs require one frozen reviewed
 combined revision; no publication or whole-app CPU acceptance is implied.
+## 2026-09-09 independently measured V4 RF routing
+
+V4 input selection, internal HF translation, the route-related GPIO 5 level and
+R17 notch fields are implemented from independently reviewed USB observations.
+No GPL source or disassembly, quarantined repository or research implementation
+input was used. No dependency or binary is added. Exact source/instrument/report
+identities and the deliberate exact-28.8-MHz boundary decision are recorded in
+`docs/BLOG_V4_RF_ROUTING.md`; physical RF and final consumer acceptance remain
+separate gates.

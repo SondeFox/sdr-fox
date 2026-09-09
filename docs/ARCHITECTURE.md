@@ -89,12 +89,17 @@ tests) so they're unit-testable without a transport. One module per chip.
 
 The R82xx family (R820T2 is the deep implementation) and the E4000 are driven.
 The E4000 is zero-IF: the demod runs with IF = 0, no spectrum inversion, and
-both ADC inputs, unlike the R82xx low-IF path. FC0012/FC0013/FC2580 tuners and
-Blog V4 detection are trait-wired but not implemented; a probe that finds one
-of those chips — or no tuner at all — fails the open with
+both ADC inputs, unlike the R82xx low-IF path. FC0012/FC0013/FC2580 tuners are
+not implemented; a probe that finds one of those chips — or no tuner at all — fails the open with
 `TunerError::NoSupportedTuner` rather than a misleading PLL error. macOS now uses the unmodified nusb backend; the historical control-OUT
 fault was not reproduced on the current physical receivers/host. USB teardown, Android fd streaming, and throughput have
 mock coverage but still require physical-device release gates.
+
+Strictly identified Blog V4 receivers additionally use a private board plan for
+SMA-domain input/notch selection, GPIO 5 and internal HF translation before the
+tuner's LO/IF calculation. The generic tracking table and all other tuners remain
+unchanged. The measured programming facts, boundary decision and qualification
+limits are in [the V4 RF contract](BLOG_V4_RF_ROUTING.md).
 
 ## macOS direct USB update (2026-09-06)
 

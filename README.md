@@ -164,3 +164,9 @@ The existing strict V4 clock predicate is unchanged; generic R828D retains
 16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
 C ABI or radio-register change is included. See
 [the implementation and provenance record](docs/ANDROID_USB_IDENTITY.md).
+## Blog V4 RF routing update (2026-09-09)
+
+Strictly identified V4 receivers now select the internal HF/VHF/UHF path,
+apply built-in HF conversion, and program the measured notch/GPIO fields.
+The [RF contract](docs/BLOG_V4_RF_ROUTING.md) records independent measurement
+provenance, the exact-boundary decision and remaining RF qualification gates.
