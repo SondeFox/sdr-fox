@@ -1185,6 +1185,22 @@ mod tests {
     }
 
     #[test]
+    fn narrowband_pll_failure_reports_local_oscillator_not_requested_rf() {
+        let mut bus = ScriptedReadBus::new(vec![]);
+        let mut tuner = R82xx::for_blog_v4();
+        tuner.set_bandwidth(&mut bus, 250_000).unwrap();
+        // Empty scripted reads never assert the PLL lock bit. This independently
+        // reproduces the reported RF/LO relation without requiring RF input.
+        let error = tuner.set_freq(&mut bus, 401_500_000).unwrap_err();
+        assert!(matches!(
+            error,
+            TunerError::PllNotLocked {
+                freq_hz: 403_625_000
+            }
+        ));
+    }
+
+    #[test]
     fn bandwidth_boundaries_are_total_and_do_not_underflow() {
         let narrowest = bandwidth_config(0);
         assert_eq!(narrowest.reg_b & 0x0f, 6);

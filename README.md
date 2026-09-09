@@ -155,3 +155,12 @@ historical 1/2/1 MiB measurements. The [kernel record](docs/MACOS_AIRSPY_KERNEL_
 preserves the earlier FIR work. Consumer integration must build Mac/header,
 Kotlin binding and both Android JNI artifacts from one reviewed combined source;
 component results do not establish a whole-app CPU or energy result.
+
+## Android V4 identity correction (2026-09-09)
+
+Android now offers additive `openUsbDevice`/`nativeOpenByFdWithIdentity` APIs
+that preserve actual authorized USB IDs and manufacturer/product metadata.
+The existing strict V4 clock predicate is unchanged; generic R828D retains
+16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
+C ABI or radio-register change is included. See
+[the implementation and provenance record](docs/ANDROID_USB_IDENTITY.md).

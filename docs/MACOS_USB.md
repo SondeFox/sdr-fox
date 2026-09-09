@@ -47,9 +47,10 @@ and transport only. The manufacturer also documents switched HF/VHF/UHF
 inputs/notches; full RF path/sensitivity/HF acceptance is not proved by IQ
 bytes and remains a separate test requirement.
 
-Android fd users without manufacturer/product descriptors do not activate this
-board-specific path; no Android V4 support improvement is claimed merely from
-rebuilding the unchanged JNI binding. The Mac C API preserves the available
+Historically, Android fd users without manufacturer/product descriptors could
+not activate this board-specific path; rebuilding that unchanged binding did
+not improve Android V4 support. The later additive descriptor API is recorded
+in [ANDROID_USB_IDENTITY.md](ANDROID_USB_IDENTITY.md). The Mac C API preserves the available
 native descriptor strings and therefore can identify the attached V4.
 
 ## C API and lifetime

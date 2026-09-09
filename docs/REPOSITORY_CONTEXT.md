@@ -104,3 +104,12 @@ source, tests, artifact hashes and same-revision Mac/header/Kotlin/both-JNI
 adoption belong to the consumer receipt. Source and component success are not
 publication, clean-host reproduction, final signed-app or approximately 30% CPU
 acceptance. Prior successful and failed physical measurements remain historical.
+
+## Android V4 identity correction (2026-09-09)
+
+Android now offers additive `openUsbDevice`/`nativeOpenByFdWithIdentity` APIs
+that preserve actual authorized USB IDs and manufacturer/product metadata.
+The existing strict V4 clock predicate is unchanged; generic R828D retains
+16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
+C ABI or radio-register change is included. See
+[the implementation and provenance record](ANDROID_USB_IDENTITY.md).

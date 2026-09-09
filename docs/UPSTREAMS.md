@@ -99,3 +99,12 @@ ignored verification output. Exact worker origins, measured artifacts, recovery
 incidents and limits are in MACOS_AIRSPY_PACKED_STATS_CPU.md and
 MACOS_AIRSPY_RESILIENCE.md. Atomic consumer outputs require one frozen reviewed
 combined revision; no publication or whole-app CPU acceptance is implied.
+
+## Android V4 identity correction (2026-09-09)
+
+Android now offers additive `openUsbDevice`/`nativeOpenByFdWithIdentity` APIs
+that preserve actual authorized USB IDs and manufacturer/product metadata.
+The existing strict V4 clock predicate is unchanged; generic R828D retains
+16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
+C ABI or radio-register change is included. See
+[the implementation and provenance record](ANDROID_USB_IDENTITY.md).

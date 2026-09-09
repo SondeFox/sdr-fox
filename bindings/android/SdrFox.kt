@@ -465,6 +465,8 @@ class SdrFox private constructor(handle: Long, ownedFd: ParcelFileDescriptor) : 
          * Pass [productName] from `UsbDevice.getProductName()` when available.
          * It is the reliable R2/Mini discriminator used by the Airspy backend;
          * alternatively select [Kind.AIRSPY_MINI] explicitly.
+         * Board-specific receivers such as Blog V4 need the complete identity;
+         * use [openUsbDevice] with the framework's actual USB metadata.
          */
         @JvmStatic
         @JvmOverloads
@@ -472,7 +474,36 @@ class SdrFox private constructor(handle: Long, ownedFd: ParcelFileDescriptor) : 
             fd: Int,
             kind: Kind = Kind.RTL_SDR,
             productName: String? = null,
+        ): SdrFox? = openOwnedFd(fd) { owned ->
+            nativeOpenByFd(owned, kind.native, productName)
+        }
+
+        /**
+         * Open the same framework-authorized device represented by [fd]. Pass
+         * its actual `UsbDevice` IDs and manufacturer/product strings after
+         * permission is granted. Missing strings stay null; never substitute a
+         * model name or infer Blog V4 from an R828D tuner or product string alone.
+         * No serial number is needed or retained. The connection lifetime and
+         * close ordering are identical to [open].
+         */
+        @JvmStatic
+        fun openUsbDevice(
+            fd: Int,
+            kind: Kind,
+            vendorId: Int,
+            productId: Int,
+            manufacturerName: String?,
+            productName: String?,
         ): SdrFox? {
+            require(vendorId in 0..0xffff) { "vendorId must be a USB uint16" }
+            require(productId in 0..0xffff) { "productId must be a USB uint16" }
+            return openOwnedFd(fd) { owned ->
+                nativeOpenByFdWithIdentity(owned, kind.native, vendorId, productId,
+                    manufacturerName, productName)
+            }
+        }
+
+        private fun openOwnedFd(fd: Int, nativeOpen: (Int) -> Long): SdrFox? {
             if (fd < 0) return null
             val ownedFd = try {
                 // fromFd duplicates rather than adopts, so the native nusb
@@ -483,7 +514,7 @@ class SdrFox private constructor(handle: Long, ownedFd: ParcelFileDescriptor) : 
                 return null
             }
             val h = try {
-                nativeOpenByFd(ownedFd.fd, kind.native, productName)
+                nativeOpen(ownedFd.fd)
             } catch (error: Throwable) {
                 try { ownedFd.close() } catch (_: Exception) {}
                 throw error
@@ -498,6 +529,14 @@ class SdrFox private constructor(handle: Long, ownedFd: ParcelFileDescriptor) : 
         @JvmStatic private external fun nativeOpenByFd(
             fd: Int,
             kind: Int,
+            productName: String?,
+        ): Long
+        @JvmStatic private external fun nativeOpenByFdWithIdentity(
+            fd: Int,
+            kind: Int,
+            vendorId: Int,
+            productId: Int,
+            manufacturerName: String?,
             productName: String?,
         ): Long
         @JvmStatic private external fun nativeSetFrequency(handle: Long, hz: Long)
