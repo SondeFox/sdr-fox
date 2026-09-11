@@ -27,6 +27,54 @@ fn cf32_block(samples: Vec<f32>, dropped: u64, sequence: u64) -> IqBlock {
 }
 
 #[test]
+fn rtl_transfer_extents_and_partial_reads_preserve_every_cu8_byte_and_metadata() {
+    // Authored in memory: exercise byte rails and a short final transfer without
+    // a captured fixture. Caller extents include split pairs supported by C ABI.
+    let expected: Vec<u8> = (0..(3 * 65_536usize + 70))
+        .map(|n| (n.wrapping_mul(37) ^ (n >> 4)).to_le_bytes()[0])
+        .collect();
+    for transfer_bytes in [16_384, 65_536] {
+        for caller_bytes in [3, 514, 8_192, 262_144] {
+            let (handle, sender, ..) = tests::test_stream_depth(false, BRIDGE_DEPTH);
+            for (sequence, part) in expected.chunks(transfer_bytes).enumerate() {
+                sender
+                    .send(Some(Ok(IqBlock {
+                        samples: IqSamples::Cu8(part.to_vec()),
+                        dropped: 7,
+                        sequence: sequence as u64,
+                        timestamp: None,
+                        clips: 0,
+                        raw_samples: 0,
+                    })))
+                    .unwrap();
+            }
+            let mut result = Vec::new();
+            let mut buffer = vec![0; caller_bytes];
+            while result.len() < expected.len() {
+                let read =
+                    unsafe { sdrfox_read_stream(handle, buffer.as_mut_ptr(), buffer.len(), 100) };
+                assert!(read > 0);
+                result.extend_from_slice(&buffer[..usize::try_from(read).unwrap()]);
+                let mut stats = SdrFoxStreamStats::default();
+                assert_eq!(unsafe { sdrfox_stream_stats(handle, &raw mut stats) }, 0);
+                assert_eq!(stats.bytes_read, result.len() as u64);
+                assert_eq!(
+                    stats.last_sequence,
+                    ((result.len() - 1) / transfer_bytes) as u64
+                );
+                assert_eq!(stats.blocks_read, stats.last_sequence + 1);
+                assert_eq!(stats.last_dropped, 7);
+            }
+            assert_eq!(
+                result, expected,
+                "transfer={transfer_bytes}, caller={caller_bytes}"
+            );
+            unsafe { sdrfox_close_stream(handle) };
+        }
+    }
+}
+
+#[test]
 fn large_raw_and_odd_partitions_preserve_current_synthesis_bits() {
     // Independently generated synthetic containers, including rails and high
     // bits; no recording or external implementation is an input.

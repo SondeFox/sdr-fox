@@ -1,8 +1,8 @@
-//! Root-selected macOS Airspy transport policy and fixed diagnostic baselines.
+//! Bounded macOS transport policies and fixed Airspy diagnostic baselines.
 //! The controlled resilience comparison chose 4/4/1 MiB at 256 KiB with synthesis;
 //! see `docs/MACOS_AIRSPY_RESILIENCE.md` for evidence and remaining limits.
 
-use sdr_fox_core::{IqFormat, StreamConfig};
+use sdr_fox_core::{DeviceKind, IqFormat, StreamConfig};
 
 pub(super) const INFLIGHT_RAW_BYTES: usize = 1_048_576;
 pub(super) const QUEUED_RAW_BYTES: usize = 2_097_152;
@@ -110,17 +110,31 @@ impl TransferPolicy {
     }
 }
 
-pub(super) fn production_policy(airspy: bool) -> TransferPolicy {
-    policy_for_platform(cfg!(target_os = "macos"), airspy)
+pub(super) fn production_policy(kind: DeviceKind, applied_rate_hz: Option<u32>) -> TransferPolicy {
+    policy_for_platform(cfg!(target_os = "macos"), kind, applied_rate_hz)
 }
 
-fn policy_for_platform(macos: bool, airspy: bool) -> TransferPolicy {
-    if macos && airspy {
+fn policy_for_platform(
+    macos: bool,
+    kind: DeviceKind,
+    applied_rate_hz: Option<u32>,
+) -> TransferPolicy {
+    if macos && kind == DeviceKind::Airspy {
         TransferPolicy::resilience4()
     } else {
         let config = StreamConfig::default();
+        // Whole 64 KiB CU8 transfers take 131 ms at 250 kS/s. Use the
+        // consumer Android adapter's existing 16 KiB extent only within
+        // RTL's low-rate window. Higher/unknown rates retain their budgets.
+        let low_rate_rtl = macos
+            && kind == DeviceKind::RtlSdr
+            && applied_rate_hz.is_some_and(|hz| (225_001..=300_000).contains(&hz));
         TransferPolicy {
-            raw_bytes: config.buffer_size,
+            raw_bytes: if low_rate_rtl {
+                16_384
+            } else {
+                config.buffer_size
+            },
             inflight: config.buffer_count,
             raw_queue_blocks: config.queue_depth,
             bridge_blocks: super::BRIDGE_DEPTH,
@@ -180,8 +194,12 @@ mod tests {
 
     #[test]
     fn other_platforms_and_receivers_retain_shared_defaults() {
-        for (macos, airspy) in [(false, false), (false, true), (true, false)] {
-            let policy = policy_for_platform(macos, airspy);
+        for (macos, kind) in [
+            (false, DeviceKind::RtlSdr),
+            (false, DeviceKind::Airspy),
+            (true, DeviceKind::RtlSdr),
+        ] {
+            let policy = policy_for_platform(macos, kind, None);
             let actual = policy.config(IqFormat::Cf32);
             let expected = StreamConfig::default();
             assert_eq!(actual.buffer_size, expected.buffer_size);
@@ -189,7 +207,7 @@ mod tests {
             assert_eq!(actual.queue_depth, expected.queue_depth);
             assert_eq!(policy.bridge_blocks, 8);
         }
-        let selected = policy_for_platform(true, true);
+        let selected = policy_for_platform(true, DeviceKind::Airspy, None);
         assert_eq!(selected.raw_bytes, 262_144);
         assert_eq!(selected.inflight, 16);
         assert_eq!(selected.raw_queue_blocks, 16);
@@ -201,5 +219,52 @@ mod tests {
         assert_eq!(selected.payload_bytes(), (4_194_304, 4_194_304, 1_048_576));
         let baseline = TransferPolicy::diagnostic(256, PayloadProfile::Baseline).unwrap();
         assert_eq!(baseline.payload_bytes(), (1_048_576, 2_097_152, 1_048_576));
+    }
+
+    #[test]
+    fn only_known_macos_rtl_low_rates_select_smaller_transfers() {
+        for rate in [
+            None,
+            Some(0),
+            Some(225_000),
+            Some(225_001),
+            Some(250_000),
+            Some(300_000),
+            Some(300_001),
+            Some(900_001),
+            Some(3_200_000),
+            Some(u32::MAX),
+        ] {
+            for macos in [false, true] {
+                for kind in [DeviceKind::RtlSdr, DeviceKind::Airspy, DeviceKind::Unknown] {
+                    let policy = policy_for_platform(macos, kind, rate);
+                    if macos && kind == DeviceKind::Airspy {
+                        assert_eq!(policy, TransferPolicy::resilience4());
+                    } else {
+                        let low = macos
+                            && kind == DeviceKind::RtlSdr
+                            && matches!(rate, Some(225_001 | 250_000 | 300_000));
+                        assert_eq!(
+                            policy.raw_bytes,
+                            if low { 16_384 } else { 65_536 },
+                            "macos={macos}, kind={kind:?}, rate={rate:?}"
+                        );
+                        assert_eq!(
+                            (
+                                policy.inflight,
+                                policy.raw_queue_blocks,
+                                policy.bridge_blocks
+                            ),
+                            (16, 32, 8)
+                        );
+                        assert_eq!(policy.raw_bytes % 512, 0);
+                    }
+                }
+            }
+        }
+        let low = policy_for_platform(true, DeviceKind::RtlSdr, Some(250_000));
+        assert_eq!(low.raw_bytes * low.inflight, 262_144);
+        assert_eq!(low.raw_bytes * low.raw_queue_blocks, 524_288);
+        assert_eq!(low.raw_bytes / 2, 8_192);
     }
 }
