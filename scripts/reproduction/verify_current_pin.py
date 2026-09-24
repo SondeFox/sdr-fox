@@ -268,6 +268,20 @@ def one_option(argv, option):
     return values[0]
 
 
+def jni_crate_types(argv):
+    """Cargo may repeat --crate-type or combine the pinned manifest's two kinds."""
+    kinds = []
+    for index, item in enumerate(argv):
+        if item == "--crate-type":
+            require(index + 1 < len(argv), "incomplete-measured-command-option")
+            kinds.extend(argv[index + 1].split(","))
+        elif item.startswith("--crate-type="):
+            kinds.extend(item.split("=", 1)[1].split(","))
+    require(len(kinds) == 2 and set(kinds) == {"cdylib", "rlib"},
+            "android-rustc-crate-types-mismatch")
+    return frozenset(kinds)
+
+
 def observed_assignment(section, key):
     pattern = r'(?<![A-Za-z0-9_])"?' + re.escape(key) + r'"?\s*(?:=|:)\s*("(?:\\.|[^"\\])*"|[^\s,}]+)'
     found = []
@@ -301,11 +315,11 @@ def parse_android_build(log, roles):
             tokens = shlex.split(match[1])
             if "--crate-name" not in tokens or one_option(tokens, "--crate-name") != "sdr_fox_jni":
                 continue
-            starts = [i for i, token in enumerate(tokens) if Path(token).name == "rustc"]
+            starts = [i for i, token in enumerate(tokens) if token.startswith("/") and Path(token).name == "rustc"]
             require(len(starts) == 1, "android-rustc-executable-ambiguous")
             argv = [normalized_paths(token, roles) for token in tokens[starts[0]:]]
-            require(one_option(argv, "--target") == target and one_option(argv, "--crate-type") == "cdylib",
-                    "android-rustc-target-or-kind-mismatch")
+            require(one_option(argv, "--target") == target, "android-rustc-target-or-kind-mismatch")
+            jni_crate_types(argv)
             linker_options = [argv[i + 1][len("linker="):] for i, token in enumerate(argv[:-1])
                               if token == "-C" and argv[i + 1].startswith("linker=")]
             linker_options += [token[len("-Clinker="):] for token in argv if token.startswith("-Clinker=")]

@@ -336,9 +336,9 @@ class VerifierTests(unittest.TestCase):
             wrapper = {"ANDROID_PLATFORM": "21", "ANDROID_ABI": abi,
                        "_CARGO_NDK_LINK_CLANG": str(ndk_bin / "clang"), "_CARGO_NDK_LINK_TARGET": "--target=" + target + "21",
                        "CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER": str(cargo_ndk)}
-            rustc = [str(roles["$RUSTUP_HOME"] / "toolchains/1.95.0-aarch64-apple-darwin/bin/rustc"), "--crate-name", "sdr_fox_jni", "--crate-type", "cdylib", "--target", target, "-C", "linker=" + str(cargo_ndk)]
+            rustc = [str(roles["$RUSTUP_HOME"] / "toolchains/1.95.0-aarch64-apple-darwin/bin/rustc"), "--crate-name", "sdr_fox_jni", "--crate-type", "cdylib", "--crate-type", "rlib", "--target", target, "-C", "linker=" + str(cargo_ndk)]
             raw_build += "Building " + abi + " (" + target + ")\n" + "".join("Exporting " + key + "=" + json.dumps(value) + "\n" for key, value in wrapper.items())
-            raw_build += "Running `" + " ".join(rustc) + "`\n"
+            raw_build += "Running `RUSTC=" + rustc[0] + " " + " ".join(rustc) + "`\n"
             rows.append({"abi": abi, "rust_target": target, "api_level": 21, "clang_target": "--target=" + target + "21",
                          "clang_path": "$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang", "linker_path": "$TOOL_ROOT/bin/cargo-ndk",
                          "rustc_argv": [v.normalized_paths(arg, roles) for arg in rustc],
@@ -427,6 +427,35 @@ class VerifierTests(unittest.TestCase):
         for changed in (log.replace('ANDROID_PLATFORM="21"', 'ANDROID_PLATFORM="22"'), log.replace("--crate-name sdr_fox_jni", "--crate-name other"), log + log):
             with self.assertRaises(v.VerificationError):
                 v.parse_android_build(changed, roles)
+
+    def test_real_cargo_dual_crate_types_and_rustc_assignment_are_accepted(self):
+        receipt, path, _, roles, _, _ = self.measured_fixture()
+        _, log = v.checked_command(receipt, path.parent, "build-android")
+        self.assertIn("Running `RUSTC=", log)
+        actual = "--crate-type cdylib --crate-type rlib"
+        for flags in (actual, "--crate-type cdylib,rlib", "--crate-type=rlib,cdylib",
+                      "--crate-type=cdylib --crate-type rlib"):
+            with self.subTest(flags=flags):
+                rows = v.parse_android_build(log.replace(actual, flags), roles)
+                self.assertEqual(len(rows), 2)
+                for row in rows:
+                    self.assertEqual(v.jni_crate_types(row["rustc_argv"]), {"cdylib", "rlib"})
+
+    def test_jni_crate_type_omissions_additions_and_duplicates_are_rejected(self):
+        receipt, path, _, roles, _, _ = self.measured_fixture()
+        _, log = v.checked_command(receipt, path.parent, "build-android")
+        actual = "--crate-type cdylib --crate-type rlib"
+        for flags in ("", "--crate-type cdylib", "--crate-type rlib",
+                      "--crate-type cdylib,staticlib", "--crate-type cdylib,rlib,staticlib",
+                      "--crate-type cdylib,cdylib,rlib", "--crate-type cdylib,"):
+            with self.subTest(flags=flags), self.assertRaises(v.VerificationError):
+                v.parse_android_build(log.replace(actual, flags), roles)
+
+    def test_a_second_actual_rustc_executable_is_rejected(self):
+        receipt, path, _, roles, _, _ = self.measured_fixture()
+        _, log = v.checked_command(receipt, path.parent, "build-android")
+        with self.assertRaises(v.VerificationError):
+            v.parse_android_build(log.replace(" --crate-name", " /unexpected/bin/rustc --crate-name"), roles)
 
     def test_clang_actual_api22_crt_and_unpinned_tool_are_rejected(self):
         receipt, path, _, roles, _, _ = self.measured_fixture()
