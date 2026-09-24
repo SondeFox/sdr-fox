@@ -54,6 +54,7 @@ class EffectiveAndroidTests(unittest.TestCase):
                     original.replace('ANDROID_PLATFORM=21\n', 'ANDROID_PLATFORM=21\n    Exporting ANDROID_PLATFORM=22\n', 1),
                     original.replace(f"-C linker={LINKER}", "-C linker=/wrong/linker", 1),
                     original.replace(f"{RUSTC} --crate-name", "/wrong/rustc --crate-name", 1),
+                    original.replace(f"{RUSTC} --crate-name", "rustc --crate-name", 1),
                     original.replace("--target aarch64-linux-android", "--target x86_64-linux-android", 1),
                     original.replace("--crate-type cdylib", "--crate-type staticlib", 1)]
         for index, log in enumerate(variants):

@@ -78,3 +78,10 @@ consumer pin; it does not merge the runtime branch or move the consumer pin.
 Tool origins and licenses are inventoried in `docs/CLEAN_REPRODUCTION.md`.
 No GPL implementation, restricted history, audit corpus, radio capture,
 credential, or generated native output was copied into this change.
+
+The Mac HOME-path classifier additionally compares complete object payloads to
+one checksum-pinned official Rust compiler-builtins archive from the validated
+1.95.0 target sysroot. Its origin and component licenses are recorded in
+`docs/CLEAN_REPRODUCTION.md`. This explains inherited compiler build paths; it
+does not relax project-path rejection or establish general redistribution
+clearance, and no reference binary is copied into Git.

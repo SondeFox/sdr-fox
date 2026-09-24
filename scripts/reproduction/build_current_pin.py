@@ -406,6 +406,27 @@ class Builder:
             "--all-features", "--format-version", "1", "--manifest-path",
             str(self.source / "crates/sdr-fox-cabi/Cargo.toml")])
 
+    def build_android(self, rust_bin):
+        # Cargo otherwise prints a bare `rustc` even when our PATH selects the
+        # correct toolchain. Bind the already installed, inventoried compiler
+        # explicitly in this child only; neither parser may infer PATH identity.
+        compiler = rust_bin / "rustc"
+        rustup_home = Path(self.env["RUSTUP_HOME"])
+        expected = rustup_home / "toolchains" / RUST_TOOLCHAIN / "bin/rustc"
+        require(compiler.is_absolute() and compiler == expected and compiler.is_file(), "Missing pinned Android compiler")
+        require("RUSTC" not in self.env, "Unexpected parent compiler override")
+        inventory = json.loads((self.evidence / "rust-toolchain-inventory.json").read_text())
+        matches = [item for item in inventory if item.get("path") == str(compiler.relative_to(rustup_home))]
+        compiler_sha256 = sha256(compiler)
+        require(len(matches) == 1 and matches[0].get("sha256") == compiler_sha256, "Pinned Android compiler inventory mismatch")
+        version = self.command("android-rustc-version", [str(compiler), "--version"], query=True).strip()
+        require(version == RUSTC_VERSION, "Unexpected pinned Android compiler version")
+        self.receipt["android_compiler"] = {"path": self.sanitized(str(compiler)), "sha256": compiler_sha256,
+            "version": version, "version_log": self.log_reference("android-rustc-version")}
+        self.save_receipt()
+        child_env = self.env | {"RUSTC": str(compiler)}
+        return self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], env=child_env, query=True)
+
     def run(self) -> None:
         env = self.original_env
         guard_host(env)
@@ -500,7 +521,7 @@ class Builder:
         self.copy_artifact(header, "sdr_fox.h")
         self.copy_artifact(self.source / "bindings" / "android" / "SdrFox.kt", "SdrFox.kt")
         self.c_link_smoke(self.evidence / "artifacts/libsdr_fox_ffi.a", self.evidence / "artifacts/sdr_fox.h", scratch, apple_tools["clang"])
-        android_log = self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], query=True)
+        android_log = self.build_android(rust_bin)
         self.observe_android_commands(android_log, ndk, tool_root, rust_bin, scratch)
         for abi, target in (("arm64-v8a", TARGETS[1]), ("x86_64", TARGETS[2])):
             self.copy_artifact(self.source / "target" / target / "release" / "libsdr_fox_jni.so", abi + "/libsdr_fox_jni.so")

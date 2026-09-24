@@ -120,3 +120,10 @@ redistribution boundaries are recorded in docs/CLEAN_REPRODUCTION.md.
 No toolchain, SDK, cache or signing material is included in its evidence
 artifact. Native output obligations remain governed by the exact source pin's
 notices and the consumer's package inventories; running CI is not clearance.
+
+The exact Rust compiler-builtins runtime archive used only for reproduction
+path-provenance verification is inventoried in
+docs/CLEAN_REPRODUCTION.md#exact-provenance-of-prebuilt-compiler-object-paths.
+Its pinned source declares MIT AND Apache-2.0 WITH LLVM-exception AND
+(MIT OR Apache-2.0); retain its applicable component terms. No reference binary
+is vendored or newly distributed by this verifier change.
