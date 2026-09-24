@@ -23,6 +23,11 @@ import sys
 import tempfile
 import tomllib
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from profiles import HISTORICAL, PROFILES, load_manifest, select_profile
+from page_layout import check_link_args, inspect_layout
+from candidate_authority import verify_receipt_authority
+
 EXPECTED_PATH = Path(__file__).with_name("expected.json")
 CANONICAL_SOURCE_URLS = frozenset({
     "https://github.com/SondeFox/sdr-fox",
@@ -199,7 +204,7 @@ def verify_packages(source, cargo_home, graphs):
     return verified
 
 
-def check_toolchain(ndk, expected):
+def check_toolchain(ndk, expected, profile=HISTORICAL):
     require(sys.platform == "darwin" and platform.machine() == "arm64", "wrong-host-platform")
     identities = {}
     for key, args in (("rustc_version", ["rustc", "--version"]), ("cargo_version", ["cargo", "--version"]), ("cargo_ndk_version", ["cargo", "ndk", "--version"])):
@@ -222,11 +227,13 @@ def check_toolchain(ndk, expected):
         identities[key] = value
     xcode = run(["/usr/bin/xcodebuild", "-version"]).strip()
     require(re.fullmatch(r"Xcode [0-9]+(?:\.[0-9]+){0,2}\nBuild version [A-Za-z0-9]+", xcode), "unrecognized-xcode-version")
+    if profile.xcode_identity is not None:
+        require(xcode == profile.xcode_identity, "candidate-xcode-identity-mismatch")
     identities["xcode_version"] = xcode
     return identities
 
 
-def build_path_roles(source, ndk):
+def build_path_roles(source, ndk, profile=HISTORICAL):
     home = Path(os.environ["HOME"]).resolve()
     runner_temp = Path(os.environ["RUNNER_TEMP"]).resolve()
     cargo_ndk = shutil.which("cargo-ndk")
@@ -235,7 +242,11 @@ def build_path_roles(source, ndk):
     tool_root = runner_temp / "sondefox-reproduction-tools"
     require(cargo_ndk == tool_root / "bin/cargo-ndk", "cargo-ndk-executable-path-mismatch")
     developer = Path(os.environ["DEVELOPER_DIR"]).resolve()
-    require(str(developer) == "/Applications/Xcode_26.6.app/Contents/Developer", "unreviewed-apple-tool-selection")
+    if profile == HISTORICAL:
+        require(str(developer) == profile.developer_directory, "unreviewed-apple-tool-selection")
+    else:
+        require(os.environ["DEVELOPER_DIR"] == profile.developer_directory and
+                developer == Path(profile.developer_directory).resolve(), "unreviewed-apple-tool-selection")
     return {"$SOURCE": source, "$HOME": home, "$RUSTUP_HOME": runner_temp / "sondefox-reproduction-rustup",
             "$TOOL_ROOT": tool_root, "$NDK_HOME": ndk, "$SCRATCH": runner_temp / "sondefox-reproduction-scratch",
             "$RUNNER_TEMP": runner_temp, "$DEVELOPER_DIR": developer,
@@ -507,7 +518,7 @@ def parse_clang_driver(log, target, roles):
     return {"cc1_triple": triple, "api_level": 21, "platform_library_path": library, "crt_objects": crt, "linker_argv": linker[0]}
 
 
-def verify_android_observations(receipt, evidence_root, roles, expected):
+def verify_android_observations(receipt, evidence_root, roles, expected, profile=HISTORICAL):
     rows = receipt.get("android_effective_commands")
     require(type(rows) is list and len(rows) == 2 and all(type(row) is dict for row in rows), "android-observations-missing")
     argv, log = checked_command(receipt, evidence_root, "build-android")
@@ -519,6 +530,9 @@ def verify_android_observations(receipt, evidence_root, roles, expected):
     require(sha256(probe.read_bytes()) == expected["build_evidence"]["android_probe_source_sha256"], "android-probe-source-mismatch")
     for actual in measured:
         row = next(r for r in rows if r["abi"] == actual["abi"])
+        if profile.android_link_args:
+            page_args = check_link_args(actual["rustc_argv"], profile.android_link_args)
+            require(row.get("page_link_args") == page_args, "android-page-link-policy-mismatch")
         require(all(row.get(key) == value for key, value in actual.items()), "android-observation-contradicts-build-log")
         referenced_command(receipt, evidence_root, "build-android", row.get("build_log"))
         driver = row.get("clang_driver")
@@ -534,13 +548,21 @@ def verify_android_observations(receipt, evidence_root, roles, expected):
     return [{"abi": row["abi"], "rust_target": row["rust_target"], "api_level": 21} for row in measured]
 
 
-def verify_build_evidence(receipt_path, source, artifact_root, ndk, expected):
+def verify_build_evidence(receipt_path, source, artifact_root, ndk, expected, *, manifest=None):
+    profile = manifest.profile if manifest else HISTORICAL
     receipt, receipt_hash = read_build_receipt(receipt_path, artifact_root, expected)
-    roles = build_path_roles(source, ndk)
+    if profile != HISTORICAL:
+        require(receipt.get("reconstruction_profile") == profile.name and
+                receipt.get("expected_manifest_sha256") == manifest.sha256, "build-profile-or-manifest-mismatch")
+        verify_receipt_authority(receipt.get("authority"), receipt.get("runner"))
+        xcode_argv, observed_xcode = checked_command(receipt, receipt_path.parent, "xcode")
+        require(xcode_argv == ["xcodebuild", "-version"] and observed_xcode.strip() == profile.xcode_identity,
+                "build-xcode-identity-mismatch")
+    roles = build_path_roles(source, ndk, profile)
     apple = observed_apple_tools(roles)
     verify_observed_tools(receipt, receipt_path.parent, roles, apple)
     smoke = verify_c_smoke(receipt, receipt_path.parent, artifact_root, roles, expected, apple)
-    android = verify_android_observations(receipt, receipt_path.parent, roles, expected)
+    android = verify_android_observations(receipt, receipt_path.parent, roles, expected, profile)
     return {"build_receipt_sha256": receipt_hash, "c_link_smoke": smoke, "android_targets": android,
             "apple_tools": {name: {"sha256": value["sha256"], "version_sha256": sha256(value["version"].encode())}
                             for name, value in apple.items() if name != "darwin"},
@@ -685,11 +707,12 @@ def declarations(header, kotlin, abi):
     return {"c_functions": len(c), "jni_methods": len(methods)}
 
 
-def inspect_elf(data, path, contract, ndk):
+def inspect_elf(data, path, contract, ndk, *, require_page_layout=False):
     require(len(data) >= 64 and data[:4] == b"\x7fELF", "invalid-elf")
     require(data[4] == contract["elf_class"] and data[5] == contract["elf_data"], "elf-format-mismatch")
     typ, machine = struct.unpack_from("<HH", data, 16)
     require(typ == contract["e_type"] and machine == contract["e_machine"], "elf-architecture-mismatch")
+    layout = inspect_layout(data) if require_page_layout else None
     require(not any(word.encode().lower() in data.lower() for word in contract["forbidden_byte_strings_case_insensitive"]), "forbidden-elf-content")
     binary = ndk / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
     inspected = run([str(binary / "llvm-readelf"), "-h", "-d", str(path)])
@@ -705,7 +728,10 @@ def inspect_elf(data, path, contract, ndk):
         require(match is not None, "unrecognized-elf-symbol-output")
         exported.append(match[1])
     require(sorted(exported) == contract["defined_dynamic_exports"], "elf-exports-mismatch")
-    return {"architecture": contract["android_abi"], "defined_export_count": len(exported), "needed": needed}
+    result = {"architecture": contract["android_abi"], "defined_export_count": len(exported), "needed": needed}
+    if layout is not None:
+        result["page_layout"] = layout
+    return result
 
 
 def parse_macho_archive(data):
@@ -772,8 +798,9 @@ def inspect_macos(data, path, contract):
 
 
 class Report:
-    def __init__(self):
+    def __init__(self, manifest=None):
         self.checks = []
+        self.manifest = manifest if manifest is not None else load_manifest()
 
     def check(self, label, fn):
         try:
@@ -791,14 +818,19 @@ class Report:
         return value
 
     def result(self, expected):
-        return {"schema": 1, "evidence_kind": "current-pin-artifact-verification", "fresh_build_proven": False,
+        return {"schema": 1, "evidence_kind": self.manifest.profile.evidence_kind, "fresh_build_proven": False,
                 "status": "pass" if self.checks and all(c["status"] == "pass" for c in self.checks) else "fail",
-                "expected_manifest_sha256": sha256(EXPECTED_PATH.read_bytes()),
-                "source_commit": expected["source"]["commit"], "checks": self.checks}
+                "expected_manifest_sha256": self.manifest.sha256,
+                "source_commit": self.manifest.profile.source_commit, "checks": self.checks}
 
 
-def verify(source, artifact_root, ndk, expected, build_receipt=None):
-    report = Report()
+def verify(source, artifact_root, ndk, expected, build_receipt=None, *, manifest=None):
+    manifest = manifest if manifest is not None else load_manifest()
+    profile = manifest.profile
+    report = Report(manifest)
+    if expected != manifest.document:
+        report.check("manifest", lambda: require(False, "parsed-manifest-identity-mismatch"))
+        return report.result(expected)
     env = report.check("environment", lambda: validate_environment(source, os.environ))
     if env is None:
         return report.result(expected)
@@ -807,7 +839,7 @@ def verify(source, artifact_root, ndk, expected, build_receipt=None):
     home, cargo_home = env
     if report.check("source", lambda: check_source(source, expected["source"])) is None:
         return report.result(expected)
-    if report.check("toolchain", lambda: check_toolchain(ndk, expected["toolchain"])) is None:
+    if report.check("toolchain", lambda: check_toolchain(ndk, expected["toolchain"], profile)) is None:
         return report.result(expected)
     report.check("package-graphs", lambda: verify_packages(source, cargo_home, expected["package_graphs"]))
     report.check("artifact-layout", lambda: validate_artifact_layout(artifact_root, expected["artifacts"]))
@@ -833,7 +865,7 @@ def verify(source, artifact_root, ndk, expected, build_receipt=None):
     for contract in expected["abi"]["elf_contracts"]:
         def elf_check(c=contract):
             p = safe_file(artifact_root, artifact_by_role[c["artifact_role"]]["path"])
-            return inspect_elf(p.read_bytes(), p, c, ndk)
+            return inspect_elf(p.read_bytes(), p, c, ndk, require_page_layout=bool(profile.android_link_args))
         report.check(contract["artifact_role"] + "-abi", elf_check)
     def mac_check():
         p = safe_file(artifact_root, artifact_by_role["macos_archive"]["path"])
@@ -842,7 +874,7 @@ def verify(source, artifact_root, ndk, expected, build_receipt=None):
     if build_receipt is None:
         report.check("measured-build-evidence", lambda: require(False, "build-receipt-required"))
     else:
-        report.check("measured-build-evidence", lambda: verify_build_evidence(build_receipt, source, artifact_root, ndk, expected))
+        report.check("measured-build-evidence", lambda: verify_build_evidence(build_receipt, source, artifact_root, ndk, expected, manifest=manifest))
     report.check("source-after-inspection", lambda: check_source(source, expected["source"]))
     return report.result(expected)
 
@@ -869,19 +901,22 @@ def main():
     parser.add_argument("--ndk-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--build-receipt", required=True, type=Path)
+    parser.add_argument("--profile", choices=[profile.name for profile in PROFILES], default=HISTORICAL.name)
     args = parser.parse_args()
     try:
-        expected = json.loads(EXPECTED_PATH.read_text())
+        manifest = load_manifest(select_profile(args.profile))
+        expected = manifest.document
         source, artifacts, ndk = (p.resolve() for p in (args.source_dir, args.artifact_dir, args.ndk_dir))
         require(not args.source_dir.is_symlink() and not args.artifact_dir.is_symlink(), "symlink-input-root")
         require(source != artifacts and not artifacts.is_relative_to(source), "artifact-root-overlaps-source")
         require(not args.build_receipt.is_symlink() and args.output.resolve() != args.build_receipt.resolve(), "unsafe-build-receipt-or-report-path")
-        result = verify(source, artifacts, ndk, expected, args.build_receipt.resolve())
+        result = verify(source, artifacts, ndk, expected, args.build_receipt.resolve(), manifest=manifest)
         write_report(args.output, result, source, artifacts)
     except (VerificationError, OSError, ValueError, KeyError, TypeError):
         print("Verification failed: invalid inputs or report destination.", file=sys.stderr)
         return 1
-    print(f"Current-pin verification: {result['status']} ({len(result['checks'])} checks); freshness requires independent workflow evidence.")
+    label = "Current-pin" if manifest.profile == HISTORICAL else "Candidate"
+    print(f"{label} verification: {result['status']} ({len(result['checks'])} checks); freshness requires independent workflow evidence.")
     return 0 if result["status"] == "pass" else 1
 
 
