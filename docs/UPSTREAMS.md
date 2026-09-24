@@ -45,3 +45,14 @@ Before using a new reference or upstream version:
 When uncertain, stop before importing material and ask the repository owner.
 Preserve detailed comparison evidence outside Git; only a sanitized conclusion
 belongs in this repository.
+
+## Private native reproduction workflow
+
+`docs/CLEAN_REPRODUCTION.md` inventories the immutable action pins, Rust,
+cargo-ndk and NDK inputs, their licenses and redistribution boundaries for the
+manual clean-host attempt. The workflow starts from canonical master and
+checks out the exact reviewed consumer pin separately from its own tooling.
+It never imports the restricted repository, changes the source pin, or grants
+publication approval. The GitHub-hosted image's actual version and toolchain
+file inventory accompany the evidence; a moving image label alone is not a
+reproducibility assertion.

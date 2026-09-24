@@ -1,0 +1,62 @@
+name: Current-pin clean native reproduction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdr-fox-clean-reproduction
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    if: github.repository == 'SondeFox/sdr-fox' && github.ref == 'refs/heads/master' && github.event.repository.private
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      REPRO_PRIVATE_REPOSITORY: 'true'
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out reviewed orchestration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tools
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check out the fixed consumer source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fb34d8c600725b54c5a950234c892a593c343968
+          path: fixed-source
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: false
+      - name: Build with fresh pinned tools and caches
+        run: >-
+          python3 tools/scripts/reproduction/build_current_pin.py
+          --source-dir "$GITHUB_WORKSPACE/fixed-source"
+          --evidence-dir "$RUNNER_TEMP/sondefox-reproduction"
+      - name: Independently inspect the complete compatibility set
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          unset CARGO_HOME CARGO_TARGET_DIR RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
+          export RUSTUP_HOME="$RUNNER_TEMP/sondefox-reproduction-rustup"
+          export PATH="$RUSTUP_HOME/toolchains/1.95.0-aarch64-apple-darwin/bin:$RUNNER_TEMP/sondefox-reproduction-tools/bin:$PATH"
+          python3 tools/scripts/reproduction/verify_current_pin.py \
+            --source-dir "$GITHUB_WORKSPACE/fixed-source" \
+            --artifact-dir "$RUNNER_TEMP/sondefox-reproduction/artifacts" \
+            --ndk-dir "$ANDROID_SDK_ROOT/ndk/27.2.12479018" \
+            --output "$RUNNER_TEMP/sondefox-reproduction/verification.json"
+      - name: Retain private success or failure evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: current-pin-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sondefox-reproduction/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6

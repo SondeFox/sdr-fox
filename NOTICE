@@ -108,3 +108,15 @@ there, which an unprivileged Android process cannot do regardless.)
 
 Third-party Rust crates are listed in Cargo.toml with their own licences;
 see `cargo license` or Cargo.lock for the resolved set.
+
+6. Private native reproduction tooling
+--------------------------------------------------------------------------
+
+The manual current-pin reproduction workflow uses GitHub's MIT-licensed
+checkout and artifact actions at immutable commit pins. Rust 1.95.0,
+cargo-ndk 4.1.2, Android NDK 27.2.12479018 and Xcode 26.6 are build tools,
+not newly distributed application dependencies. Exact origins, license and
+redistribution boundaries are recorded in docs/CLEAN_REPRODUCTION.md.
+No toolchain, SDK, cache or signing material is included in its evidence
+artifact. Native output obligations remain governed by the exact source pin's
+notices and the consumer's package inventories; running CI is not clearance.

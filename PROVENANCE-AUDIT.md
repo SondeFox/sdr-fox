@@ -66,3 +66,15 @@ If a future review finds a provenance concern, report it privately according
 to [`SECURITY.md`](SECURITY.md), preserve the evidence outside the repository,
 and remediate it in a new commit without importing the questioned source or
 its history.
+
+## Current-pin reproduction tooling
+
+The independently authored manual workflow and standard-library Python tools
+in `scripts/reproduction/` reconstruct one fixed canonical source revision in
+a disposable hosted environment. They are orchestration/verification work,
+not a runtime source import or a new provenance conclusion. The workflow is
+introduced from canonical master while building the separately reviewed
+consumer pin; it does not merge the runtime branch or move the consumer pin.
+Tool origins and licenses are inventoried in `docs/CLEAN_REPRODUCTION.md`.
+No GPL implementation, restricted history, audit corpus, radio capture,
+credential, or generated native output was copied into this change.
