@@ -16,6 +16,17 @@ reviewed workflow commit. Its separate source checkout is always canonical
 branch into master or change the consumer pin. Canonical history alone is
 fetched; the legacy archive is never an input.
 
+The expected manifest's `reference_consumer` preserves the original measurement
+in application repository ID `1334845456`, commit
+`2b5e999bd9a2b552c3b84347fd3583e35a9c12d0`, tree
+`680db2183af9fb2ad054e720f905eadf377dc146`, and its original URL. After the
+application cutover, that private repository is retained as
+`SondeFox/SondeFox-private-archive-20260924`; its stable
+[repository ID lookup](https://api.github.com/repositories/1334845456)
+identifies the archive independently of its name. The replacement application
+repository ID `1384652189` has fresh history and does not inherit the original
+measurement's source identity or acceptance claims.
+
 After normal review and merge into private canonical master, an authorized
 maintainer can manually run **Current-pin clean native reproduction** from
 master. It has no push, PR, schedule, matrix, retry, signing, or publication
