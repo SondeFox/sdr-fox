@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
+import shutil
 import struct
 import subprocess
 import sys
@@ -41,10 +43,10 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def run(argv, cwd=None):
+def run(argv, cwd=None, *, timeout=180):
     try:
         result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                                encoding="utf-8", errors="strict", timeout=180)
+                                encoding="utf-8", errors="strict", timeout=timeout)
     except (OSError, subprocess.TimeoutExpired, UnicodeError):
         raise VerificationError("inspection-command-unavailable") from None
     command = Path(argv[0]).name
@@ -203,6 +205,313 @@ def check_toolchain(ndk, expected):
     return identities
 
 
+def build_path_roles(source, ndk):
+    home = Path(os.environ["HOME"]).resolve()
+    runner_temp = Path(os.environ["RUNNER_TEMP"]).resolve()
+    cargo_ndk = shutil.which("cargo-ndk")
+    require(cargo_ndk is not None, "cargo-ndk-executable-missing")
+    cargo_ndk = Path(cargo_ndk).resolve()
+    tool_root = runner_temp / "sondefox-reproduction-tools"
+    require(cargo_ndk == tool_root / "bin/cargo-ndk", "cargo-ndk-executable-path-mismatch")
+    developer = Path(os.environ["DEVELOPER_DIR"]).resolve()
+    require(str(developer) == "/Applications/Xcode_26.6.app/Contents/Developer", "unreviewed-apple-tool-selection")
+    return {"$SOURCE": source, "$HOME": home, "$RUSTUP_HOME": runner_temp / "sondefox-reproduction-rustup",
+            "$TOOL_ROOT": tool_root, "$NDK_HOME": ndk, "$SCRATCH": runner_temp / "sondefox-reproduction-scratch",
+            "$RUNNER_TEMP": runner_temp, "$DEVELOPER_DIR": developer,
+            "$ANDROID_SDK_ROOT": Path(os.environ["ANDROID_SDK_ROOT"]),
+            "$TMPDIR": Path(os.environ["TMPDIR"])}
+
+
+def normalized_paths(value, roles):
+    aliases = {(role, str(path)) for role, path in roles.items()}
+    aliases.update((role, str(path.resolve())) for role, path in roles.items())
+    for role, path in sorted(aliases, key=lambda item: len(item[1]), reverse=True):
+        value = value.replace(path, role)
+    return value
+
+
+def observed_apple_tools(roles):
+    observations = {}
+    for tool in ("clang", "nm"):
+        selected = run(["/usr/bin/xcrun", "--find", tool]).strip()
+        path = Path(selected)
+        require(path.is_absolute() and path.is_file() and path.resolve().is_relative_to(roles["$DEVELOPER_DIR"]),
+                "apple-tool-path-mismatch")
+        version = run([selected, "--version"])
+        require(len(version) <= 8192 and (re.search(r"Apple clang version [0-9]+\.[0-9]+", version) if tool == "clang"
+                                        else re.search(r"Apple LLVM version [0-9]+\.[0-9]+", version)),
+                "unrecognized-apple-tool-version")
+        observations["apple_" + tool] = {"path_role": "apple-" + tool, "path": normalized_paths(selected, roles), "sha256": sha256(path.read_bytes()),
+                              "version": normalized_paths(version.strip(), roles)}
+    darwin = {name: run(["/usr/bin/uname", flag]).strip() for name, flag in
+              (("system", "-s"), ("release", "-r"), ("version", "-v"), ("machine", "-m"))}
+    require(darwin["system"] == "Darwin" and darwin["machine"] == "arm64"
+            and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", darwin["release"])
+            and darwin["version"].startswith("Darwin Kernel Version " + darwin["release"] + ":")
+            and len(darwin["version"]) <= 2048, "unrecognized-darwin-identity")
+    observations["darwin"] = darwin
+    return observations
+
+
+ANDROID_TARGETS = {"arm64-v8a": "aarch64-linux-android", "x86_64": "x86_64-linux-android"}
+
+
+def one_option(argv, option):
+    values = []
+    for index, item in enumerate(argv):
+        if item == option:
+            require(index + 1 < len(argv), "incomplete-measured-command-option")
+            values.append(argv[index + 1])
+        elif item.startswith(option + "="):
+            values.append(item[len(option) + 1:])
+    require(len(values) == 1, "missing-or-duplicate-measured-command-option")
+    return values[0]
+
+
+def observed_assignment(section, key):
+    pattern = r'(?<![A-Za-z0-9_])"?' + re.escape(key) + r'"?\s*(?:=|:)\s*("(?:\\.|[^"\\])*"|[^\s,}]+)'
+    found = []
+    for match in re.finditer(pattern, section):
+        token = match[1]
+        found.append(json.loads(token) if token.startswith('"') else token)
+    require(len(found) == 1, "missing-or-contradictory-android-link-environment")
+    return found[0]
+
+
+def parse_android_build(log, roles):
+    """Independently read cargo-ndk's actual verbose environment and JNI command."""
+    text = re.sub(r"\x1b\[[0-9;]*m", "", log)
+    markers = list(re.finditer(r"(?m)^\s*Building (arm64-v8a|x86_64) \(([^)]+)\)\s*$", text))
+    require(len(markers) == 2 and {m[1] for m in markers} == set(ANDROID_TARGETS), "android-build-sections-missing-or-duplicate")
+    result = []
+    for index, marker in enumerate(markers):
+        abi, target = marker[1], ANDROID_TARGETS[marker[1]]
+        require(marker[2] == target, "android-section-target-mismatch")
+        section = text[marker.end():markers[index + 1].start() if index + 1 < len(markers) else len(text)]
+        clang = normalized_paths(observed_assignment(section, "_CARGO_NDK_LINK_CLANG"), roles)
+        link_target = observed_assignment(section, "_CARGO_NDK_LINK_TARGET")
+        linker = normalized_paths(observed_assignment(section, "CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER"), roles)
+        require(clang == "$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+                and linker == "$TOOL_ROOT/bin/cargo-ndk" and link_target == "--target=" + target + "21",
+                "android-observed-linker-or-target-mismatch")
+        require(observed_assignment(section, "ANDROID_PLATFORM") == "21"
+                and observed_assignment(section, "ANDROID_ABI") == abi, "android-observed-api-or-abi-mismatch")
+        commands = []
+        for match in re.finditer(r"(?m)^\s*Running `([^\n]+)`\s*$", section):
+            tokens = shlex.split(match[1])
+            if "--crate-name" not in tokens or one_option(tokens, "--crate-name") != "sdr_fox_jni":
+                continue
+            starts = [i for i, token in enumerate(tokens) if Path(token).name == "rustc"]
+            require(len(starts) == 1, "android-rustc-executable-ambiguous")
+            argv = [normalized_paths(token, roles) for token in tokens[starts[0]:]]
+            require(one_option(argv, "--target") == target and one_option(argv, "--crate-type") == "cdylib",
+                    "android-rustc-target-or-kind-mismatch")
+            linker_options = [argv[i + 1][len("linker="):] for i, token in enumerate(argv[:-1])
+                              if token == "-C" and argv[i + 1].startswith("linker=")]
+            linker_options += [token[len("-Clinker="):] for token in argv if token.startswith("-Clinker=")]
+            require(linker_options == [linker], "android-rustc-linker-mismatch")
+            require(argv[0] == "$RUSTUP_HOME/toolchains/1.95.0-aarch64-apple-darwin/bin/rustc", "android-rustc-path-mismatch")
+            commands.append(argv)
+        require(len(commands) == 1, "android-jni-rustc-command-missing-or-duplicate")
+        result.append({"abi": abi, "rust_target": target, "api_level": 21, "clang_target": link_target,
+                       "clang_path": clang, "linker_path": linker, "rustc_argv": commands[0],
+                       "wrapper_assignments": {"ANDROID_PLATFORM": "21", "ANDROID_ABI": abi,
+                           "_CARGO_NDK_LINK_CLANG": clang, "_CARGO_NDK_LINK_TARGET": link_target,
+                           "CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER": linker}})
+    return sorted(result, key=lambda row: row["abi"])
+
+
+def read_build_receipt(path, artifact_root, expected):
+    """Read measured build evidence; a receipt alone never proves freshness."""
+    require(path.name == "build-receipt.json" and path.parent == artifact_root.parent,
+            "build-receipt-location-mismatch")
+    raw = safe_file(path.parent, path.name).read_bytes()
+    require(len(raw) <= 2 * 1024 * 1024, "build-receipt-too-large")
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, "duplicate-build-receipt-key")
+            result[key] = value
+        return result
+    receipt = json.loads(raw, object_pairs_hook=unique_object,
+                         parse_constant=lambda _: require(False, "invalid-build-receipt-number"))
+    require(type(receipt) is dict and type(receipt.get("schema")) is int and receipt["schema"] == 1
+            and receipt.get("status") == "built_pending_independent_verification", "build-not-successful")
+    for name, key in (("source_commit", "commit"), ("source_tree", "tree"),
+                      ("source_root", "verified_fresh_history_root"), ("lock_sha256", "cargo_lock_sha256")):
+        require(receipt.get(name) == expected["source"][key], "build-source-identity-mismatch")
+    artifacts = receipt.get("artifacts")
+    require(type(artifacts) is list and len(artifacts) == len(expected["artifacts"]), "build-artifact-set-mismatch")
+    recorded = {}
+    for artifact in artifacts:
+        require(type(artifact) is dict and type(artifact.get("path")) is str and artifact["path"] not in recorded,
+                "duplicate-or-invalid-build-artifact")
+        require(type(artifact.get("size_bytes")) is int, "invalid-build-artifact-size")
+        recorded[artifact["path"]] = (artifact.get("sha256"), artifact["size_bytes"])
+    wanted = {"artifacts/" + a["path"]: (a["sha256"], a["size_bytes"]) for a in expected["artifacts"]}
+    require(recorded == wanted, "build-artifact-identities-mismatch")
+    commands = receipt.get("commands")
+    require(type(commands) is list and bool(commands), "build-commands-missing")
+    for command in commands:
+        require(type(command) is dict and command.get("status") == "pass"
+                and type(command.get("exit_code")) is int and command["exit_code"] == 0,
+                "build-command-unsuccessful")
+    return receipt, sha256(raw)
+
+
+def checked_command(receipt, evidence_root, label):
+    matches = [c for c in receipt["commands"] if c.get("label") == label]
+    require(len(matches) == 1, "measured-command-missing-or-ambiguous")
+    command = matches[0]
+    require(command.get("status") == "pass" and type(command.get("exit_code")) is int
+            and command["exit_code"] == 0, "measured-command-failed")
+    log = command.get("log")
+    require(type(log) is str and re.fullmatch(r"logs/[0-9]{2,3}-" + re.escape(label) + r"\.log", log),
+            "measured-command-log-path-mismatch")
+    data = safe_file(evidence_root, log).read_bytes()
+    require(len(data) <= 16 * 1024 * 1024, "measured-command-log-too-large")
+    require(sha256(data) == command.get("log_sha256"), "measured-command-log-hash-mismatch")
+    argv = command.get("argv")
+    require(type(argv) is list and bool(argv) and all(type(arg) is str and 0 < len(arg) <= 8192 for arg in argv),
+            "measured-command-argv-missing")
+    return argv, data.decode("utf-8")
+
+
+def referenced_command(receipt, evidence_root, label, reference):
+    argv, text = checked_command(receipt, evidence_root, label)
+    record = next(c for c in receipt["commands"] if c.get("label") == label)
+    require(reference == {"path": record["log"], "sha256": record["log_sha256"]}, "measured-log-reference-mismatch")
+    return argv, text
+
+
+def verify_observed_tools(receipt, evidence_root, roles, actual):
+    observed = receipt.get("observed_tools")
+    require(type(observed) is dict and set(observed) == {"apple_clang", "apple_nm", "darwin"}, "observed-tool-identities-missing")
+    for name in ("clang", "nm"):
+        key = "apple_" + name
+        item = observed[key]
+        require(type(item) is dict and all(item.get(k) == value for k, value in actual[key].items()),
+                "observed-apple-tool-identity-mismatch")
+        argv, text = referenced_command(receipt, evidence_root, "apple-" + name + "-path", item.get("path_log"))
+        require(argv == ["xcrun", "--find", name] and normalized_paths(text.strip(), roles) == item["path"], "observed-tool-path-log-mismatch")
+        argv, text = referenced_command(receipt, evidence_root, "apple-" + name + "-version", item.get("version_log"))
+        require(argv == [item["path"], "--version"] and normalized_paths(text.strip(), roles) == item["version"], "observed-tool-version-log-mismatch")
+    kernel = observed["darwin"]
+    require(type(kernel) is dict and all(kernel.get(k) == value for k, value in actual["darwin"].items())
+            and type(kernel.get("logs")) is dict and set(kernel["logs"]) == set(actual["darwin"]), "observed-darwin-identity-mismatch")
+    for name, flag in (("system", "-s"), ("release", "-r"), ("version", "-v"), ("machine", "-m")):
+        argv, text = referenced_command(receipt, evidence_root, "darwin-" + name, kernel["logs"][name])
+        require(argv == ["uname", flag] and text.strip() == kernel[name], "observed-darwin-log-mismatch")
+    cargo_ndk = safe_file(roles["$TOOL_ROOT"], "bin/cargo-ndk")
+    require(sha256(cargo_ndk.read_bytes()) == receipt.get("cargo_ndk_executable_sha256"), "observed-cargo-ndk-executable-mismatch")
+
+
+def verify_c_smoke(receipt, evidence_root, artifact_root, roles, expected, apple):
+    smoke = receipt.get("c_link_smoke")
+    require(type(smoke) is dict and smoke.get("status") == "pass", "c-link-smoke-missing-or-failed")
+    version = expected["build_evidence"]["c_version"]
+    require(smoke.get("expected_version") == smoke.get("version") == version, "c-link-smoke-version-mismatch")
+    require(all(type(smoke.get(key)) is int and smoke[key] == 0 for key in ("link_exit_code", "run_exit_code")), "c-link-smoke-command-failed")
+    require(smoke.get("source_path") == "$SCRATCH/sdr-version-smoke.c"
+            and smoke.get("executable_path") == "$SCRATCH/sdr-version-smoke", "c-link-smoke-path-mismatch")
+    source = safe_file(roles["$SCRATCH"], "sdr-version-smoke.c")
+    executable = safe_file(roles["$SCRATCH"], "sdr-version-smoke")
+    require(sha256(source.read_bytes()) == smoke.get("source_sha256") == expected["build_evidence"]["c_smoke_source_sha256"], "c-link-smoke-source-mismatch")
+    identities = {a["role"]: a for a in expected["artifacts"]}
+    for role, key in (("c_header", "header_sha256"), ("macos_archive", "archive_sha256")):
+        artifact = identities[role]
+        require(sha256(safe_file(artifact_root, artifact["path"]).read_bytes()) == smoke.get(key) == artifact["sha256"], "c-link-smoke-input-mismatch")
+    executable_hash = sha256(executable.read_bytes())
+    require(executable_hash == smoke.get("executable_sha256") and os.access(executable, os.X_OK), "c-link-smoke-executable-mismatch")
+    sdk_argv, sdk_log = referenced_command(receipt, evidence_root, "apple-sdk-path", smoke.get("sdk_path_log"))
+    sdk_path = run(["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"]).strip()
+    require(Path(sdk_path).is_dir() and Path(sdk_path).resolve().is_relative_to(roles["$DEVELOPER_DIR"])
+            and sdk_argv == ["xcrun", "--sdk", "macosx", "--show-sdk-path"]
+            and normalized_paths(sdk_log.strip(), roles) == smoke.get("sdk_path") == normalized_paths(sdk_path, roles),
+            "c-link-smoke-sdk-path-mismatch")
+    argv, _ = referenced_command(receipt, evidence_root, "macos-c-link-smoke", smoke.get("link_log"))
+    artifact_path = normalized_paths(str(artifact_root), roles)
+    require(argv == [apple["apple_clang"]["path"], "-std=c11", "-Wall", "-Wextra", "-Werror", "-arch", "arm64",
+                     "-mmacosx-version-min=14.0", "-isysroot", smoke["sdk_path"], "-I", artifact_path, smoke["source_path"], artifact_path + "/libsdr_fox_ffi.a",
+                     "-framework", "IOKit", "-framework", "CoreFoundation", "-liconv", "-lSystem", "-o", smoke["executable_path"]],
+            "c-link-smoke-link-command-mismatch")
+    argv, output = referenced_command(receipt, evidence_root, "macos-c-run-smoke", smoke.get("run_log"))
+    require(argv == [smoke["executable_path"]] and output == version + "\n"
+            and sha256(output.encode()) == smoke.get("stdout_sha256"), "c-link-smoke-output-mismatch")
+    # Replay only the hash-checked scratch program bound to the fixed C source,
+    # generated header, exact archive and link command. Never execute receipt argv.
+    require(run([str(executable)], timeout=15) == version + "\n", "c-link-smoke-independent-run-mismatch")
+    return {"version": version, "executable_sha256": executable_hash, "independent_run": "pass"}
+
+
+def parse_clang_driver(log, target, roles):
+    commands = []
+    for line in log.splitlines():
+        if line.lstrip().startswith('"'):
+            commands.append([normalized_paths(arg, roles) for arg in shlex.split(line.strip())])
+    frontend = [args for args in commands if "-cc1" in args]
+    linker = [args for args in commands if args and Path(args[0]).name in ("ld", "ld.lld")]
+    require(len(frontend) == len(linker) == 1, "android-clang-commands-missing-or-duplicate")
+    triple = one_option(frontend[0], "-triple")
+    require(triple == target.replace("-linux-", "-unknown-linux-") + "21", "android-clang-api-triple-mismatch")
+    prefix = "$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64"
+    def actual_path(value):
+        require(value.startswith("$NDK_HOME/"), "android-clang-path-outside-ndk")
+        path = (roles["$NDK_HOME"] / value[len("$NDK_HOME/"):]).resolve()
+        require(path.is_relative_to(roles["$NDK_HOME"].resolve()), "android-clang-path-outside-ndk")
+        return path
+    binary_dir = roles["$NDK_HOME"] / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
+    require(actual_path(frontend[0][0]) == (binary_dir / "clang").resolve()
+            and actual_path(linker[0][0]) == (binary_dir / "ld.lld").resolve(), "android-clang-effective-tools-mismatch")
+    require("-shared" in linker[0], "android-clang-not-shared-link")
+    library = prefix + "/sysroot/usr/lib/" + target + "/21"
+    crt = [normalized_paths(str(actual_path(arg)), roles) for arg in linker[0] if Path(arg).name.startswith(("crtbegin", "crtend"))]
+    require(crt == [library + "/crtbegin_so.o", library + "/crtend_so.o"], "android-clang-crt-api-mismatch")
+    api_paths = [normalized_paths(str(actual_path(arg[2:])), roles) for arg in linker[0] if arg.startswith("-L") and re.search(r"/sysroot/usr/lib/[^/]+/[0-9]+$", arg[2:])]
+    require(api_paths == [library], "android-clang-library-api-mismatch")
+    return {"cc1_triple": triple, "api_level": 21, "platform_library_path": library, "crt_objects": crt, "linker_argv": linker[0]}
+
+
+def verify_android_observations(receipt, evidence_root, roles, expected):
+    rows = receipt.get("android_effective_commands")
+    require(type(rows) is list and len(rows) == 2 and all(type(row) is dict for row in rows), "android-observations-missing")
+    argv, log = checked_command(receipt, evidence_root, "build-android")
+    require(argv == ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never",
+                     "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], "android-build-command-mismatch")
+    measured = parse_android_build(log, roles)
+    require({row.get("abi") for row in rows} == set(ANDROID_TARGETS), "android-observations-duplicate-or-unknown")
+    probe = safe_file(roles["$SCRATCH"], "android-driver.c")
+    require(sha256(probe.read_bytes()) == expected["build_evidence"]["android_probe_source_sha256"], "android-probe-source-mismatch")
+    for actual in measured:
+        row = next(r for r in rows if r["abi"] == actual["abi"])
+        require(all(row.get(key) == value for key, value in actual.items()), "android-observation-contradicts-build-log")
+        referenced_command(receipt, evidence_root, "build-android", row.get("build_log"))
+        driver = row.get("clang_driver")
+        require(type(driver) is dict, "android-clang-driver-observation-missing")
+        label = "android-clang-" + row["rust_target"]
+        argv, log = referenced_command(receipt, evidence_root, label, driver.get("log"))
+        require(argv == [row["clang_path"], row["clang_target"], "-###", "-shared", "-fPIC", "-x", "c", "$SCRATCH/android-driver.c", "-o", "$SCRATCH/android-driver-" + row["abi"]],
+                "android-clang-probe-command-mismatch")
+        observed = parse_clang_driver(log, row["rust_target"], roles)
+        require(all(driver.get(key) == value for key, value in observed.items())
+                and driver.get("probe_source_sha256") == expected["build_evidence"]["android_probe_source_sha256"],
+                "android-clang-observation-contradicts-log")
+    return [{"abi": row["abi"], "rust_target": row["rust_target"], "api_level": 21} for row in measured]
+
+
+def verify_build_evidence(receipt_path, source, artifact_root, ndk, expected):
+    receipt, receipt_hash = read_build_receipt(receipt_path, artifact_root, expected)
+    roles = build_path_roles(source, ndk)
+    apple = observed_apple_tools(roles)
+    verify_observed_tools(receipt, receipt_path.parent, roles, apple)
+    smoke = verify_c_smoke(receipt, receipt_path.parent, artifact_root, roles, expected, apple)
+    android = verify_android_observations(receipt, receipt_path.parent, roles, expected)
+    return {"build_receipt_sha256": receipt_hash, "c_link_smoke": smoke, "android_targets": android,
+            "apple_tools": {name: {"sha256": value["sha256"], "version_sha256": sha256(value["version"].encode())}
+                            for name, value in apple.items() if name != "darwin"},
+            "darwin_release": apple["darwin"]["release"], "darwin_version_sha256": sha256(apple["darwin"]["version"].encode())}
+
+
 def validate_artifact_layout(root, artifacts):
     require(root.is_dir() and not root.is_symlink(), "artifact-directory-missing")
     files = set()
@@ -347,7 +656,7 @@ class Report:
                 "source_commit": expected["source"]["commit"], "checks": self.checks}
 
 
-def verify(source, artifact_root, ndk, expected):
+def verify(source, artifact_root, ndk, expected, build_receipt=None):
     report = Report()
     env = report.check("environment", lambda: validate_environment(source, os.environ))
     if env is None:
@@ -382,6 +691,10 @@ def verify(source, artifact_root, ndk, expected):
         p = safe_file(artifact_root, artifact_by_role["macos_archive"]["path"])
         return inspect_macos(p.read_bytes(), p, expected["abi"]["c"]["macos_archive"])
     report.check("macos-abi", mac_check)
+    if build_receipt is None:
+        report.check("measured-build-evidence", lambda: require(False, "build-receipt-required"))
+    else:
+        report.check("measured-build-evidence", lambda: verify_build_evidence(build_receipt, source, artifact_root, ndk, expected))
     report.check("source-after-inspection", lambda: check_source(source, expected["source"]))
     return report.result(expected)
 
@@ -407,13 +720,15 @@ def main():
     parser.add_argument("--artifact-dir", required=True, type=Path)
     parser.add_argument("--ndk-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--build-receipt", required=True, type=Path)
     args = parser.parse_args()
     try:
         expected = json.loads(EXPECTED_PATH.read_text())
         source, artifacts, ndk = (p.resolve() for p in (args.source_dir, args.artifact_dir, args.ndk_dir))
         require(not args.source_dir.is_symlink() and not args.artifact_dir.is_symlink(), "symlink-input-root")
         require(source != artifacts and not artifacts.is_relative_to(source), "artifact-root-overlaps-source")
-        result = verify(source, artifacts, ndk, expected)
+        require(not args.build_receipt.is_symlink() and args.output.resolve() != args.build_receipt.resolve(), "unsafe-build-receipt-or-report-path")
+        result = verify(source, artifacts, ndk, expected, args.build_receipt.resolve())
         write_report(args.output, result, source, artifacts)
     except (VerificationError, OSError, ValueError, KeyError, TypeError):
         print("Verification failed: invalid inputs or report destination.", file=sys.stderr)

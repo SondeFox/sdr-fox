@@ -250,6 +250,11 @@
       "upstream_output_path": "target/x86_64-linux-android/release/libsdr_fox_jni.so"
     }
   ],
+  "build_evidence": {
+    "android_probe_source_sha256": "2ad75d95660563887d8d3f1d0ae1dcf18c2379cbd83a5c72f5ab276351ee6949",
+    "c_smoke_source_sha256": "4c6300c5b9cc8d8f779e2f024349c7f67b22973f09f9411491f2bfbfc925539a",
+    "c_version": "0.1.0"
+  },
   "package_graphs": [
     {
       "edges": [

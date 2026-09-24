@@ -210,6 +210,231 @@ class VerifierTests(unittest.TestCase):
         self.assertEqual(output.stat().st_mode & 0o777, 0o600)
         self.assertEqual(json.loads(output.read_text()), {"status": "fail"})
 
+    def build_receipt_fixture(self):
+        receipt = {"schema": 1, "status": "built_pending_independent_verification",
+                   "source_commit": EXPECTED["source"]["commit"], "source_tree": EXPECTED["source"]["tree"],
+                   "source_root": EXPECTED["source"]["verified_fresh_history_root"],
+                   "lock_sha256": EXPECTED["source"]["cargo_lock_sha256"],
+                   "artifacts": [{"path": "artifacts/" + a["path"], "sha256": a["sha256"], "size_bytes": a["size_bytes"]}
+                                 for a in EXPECTED["artifacts"]],
+                   "commands": [{"label": "smoke-run", "status": "pass", "exit_code": 0,
+                                 "argv": ["/synthetic/smoke"], "log": "logs/01-smoke-run.log", "log_sha256": v.sha256(b"0.1.0\n")}]}
+        (self.root / "logs").mkdir()
+        (self.root / "logs/01-smoke-run.log").write_bytes(b"0.1.0\n")
+        path = self.root / "build-receipt.json"
+        path.write_text(json.dumps(receipt))
+        return receipt, path
+
+    def test_build_receipt_requires_success_exact_source_and_all_artifact_identities(self):
+        receipt, path = self.build_receipt_fixture()
+        v.read_build_receipt(path, self.root / "artifacts", EXPECTED)
+        cases = [receipt | {"status": "failed"}, receipt | {"source_commit": "0" * 40},
+                 receipt | {"artifacts": receipt["artifacts"][:-1]},
+                 receipt | {"commands": [receipt["commands"][0] | {"exit_code": 1}]}]
+        for changed in cases:
+            path.write_text(json.dumps(changed))
+            with self.subTest(fields=list(changed)), self.assertRaises(v.VerificationError):
+                v.read_build_receipt(path, self.root / "artifacts", EXPECTED)
+
+    def test_duplicate_build_receipt_key_and_artifact_cannot_hide_failure(self):
+        receipt, path = self.build_receipt_fixture()
+        path.write_text('{"status":"failed","status":"built_pending_independent_verification"}')
+        self.fails("duplicate-build-receipt-key", lambda: v.read_build_receipt(path, self.root / "artifacts", EXPECTED))
+        receipt["artifacts"][-1] = receipt["artifacts"][0]
+        path.write_text(json.dumps(receipt))
+        self.fails("duplicate-or-invalid-build-artifact", lambda: v.read_build_receipt(path, self.root / "artifacts", EXPECTED))
+
+    def test_measured_log_requires_success_unique_command_and_unchanged_bytes(self):
+        receipt, _ = self.build_receipt_fixture()
+        self.assertEqual(v.checked_command(receipt, self.root, "smoke-run")[1], "0.1.0\n")
+        (self.root / "logs/01-smoke-run.log").write_bytes(b"0.2.0\n")
+        self.fails("measured-command-log-hash-mismatch", lambda: v.checked_command(receipt, self.root, "smoke-run"))
+        receipt["commands"].append(receipt["commands"][0])
+        self.fails("measured-command-missing-or-ambiguous", lambda: v.checked_command(receipt, self.root, "smoke-run"))
+
+    def test_measured_log_cannot_escape_or_pass_a_failed_command(self):
+        receipt, _ = self.build_receipt_fixture()
+        receipt["commands"][0]["status"] = "failed"
+        self.fails("measured-command-failed", lambda: v.checked_command(receipt, self.root, "smoke-run"))
+        receipt["commands"][0]["status"] = "pass"
+        receipt["commands"][0]["log"] = "../private.log"
+        self.fails("measured-command-log-path-mismatch", lambda: v.checked_command(receipt, self.root, "smoke-run"))
+
+    def measured_fixture(self):
+        expected = copy.deepcopy(EXPECTED)
+        evidence = self.root / "evidence"
+        artifacts = evidence / "artifacts"
+        (evidence / "logs").mkdir(parents=True)
+        roles = {"$SOURCE": self.root / "source", "$HOME": self.root / "home", "$TOOL_ROOT": self.root / "tools",
+                 "$RUSTUP_HOME": self.root / "rustup", "$NDK_HOME": self.root / "ndk", "$SCRATCH": self.root / "scratch",
+                 "$RUNNER_TEMP": self.root, "$DEVELOPER_DIR": self.root / "developer",
+                 "$ANDROID_SDK_ROOT": self.root / "sdk", "$TMPDIR": self.root / "tmp"}
+        for path in roles.values():
+            path.mkdir(exist_ok=True)
+        for a in expected["artifacts"]:
+            path = artifacts / a["path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            data = ("synthetic artifact " + a["role"]).encode()
+            path.write_bytes(data)
+            a.update(sha256=v.sha256(data), size_bytes=len(data))
+        receipt = {"schema": 1, "status": "built_pending_independent_verification",
+                   "source_commit": expected["source"]["commit"], "source_tree": expected["source"]["tree"],
+                   "source_root": expected["source"]["verified_fresh_history_root"], "lock_sha256": expected["source"]["cargo_lock_sha256"],
+                   "artifacts": [{"path": "artifacts/" + a["path"], "sha256": a["sha256"], "size_bytes": a["size_bytes"]} for a in expected["artifacts"]],
+                   "commands": []}
+        def command(label, argv, output):
+            path = "logs/" + f"{len(receipt['commands']) + 1:02d}" + "-" + label + ".log"
+            data = output.encode()
+            (evidence / path).write_bytes(data)
+            ref = {"path": path, "sha256": v.sha256(data)}
+            receipt["commands"].append({"label": label, "status": "pass", "exit_code": 0,
+                "argv": [v.normalized_paths(arg, roles) for arg in argv], "log": path, "log_sha256": ref["sha256"]})
+            return ref
+        apple = {"darwin": {"system": "Darwin", "release": "25.0.0", "version": "Darwin Kernel Version 25.0.0: synthetic", "machine": "arm64"}}
+        observed = {"darwin": copy.deepcopy(apple["darwin"]) | {"logs": {}}}
+        for name, flag in (("system", "-s"), ("release", "-r"), ("version", "-v"), ("machine", "-m")):
+            observed["darwin"]["logs"][name] = command("darwin-" + name, ["uname", flag], apple["darwin"][name] + "\n")
+        for tool, version in (("clang", "Apple clang version 20.0.0"), ("nm", "llvm-nm, compatible with GNU nm\nApple LLVM version 20.0.0")):
+            path = roles["$DEVELOPER_DIR"] / tool
+            path.write_bytes(("synthetic " + tool).encode())
+            identity = {"path_role": "apple-" + tool, "path": "$DEVELOPER_DIR/" + tool, "sha256": v.sha256(path.read_bytes()), "version": version}
+            apple["apple_" + tool] = identity
+            observed["apple_" + tool] = identity | {
+                "path_log": command("apple-" + tool + "-path", ["xcrun", "--find", tool], str(path) + "\n"),
+                "version_log": command("apple-" + tool + "-version", [str(path), "--version"], version + "\n")}
+        receipt["observed_tools"] = observed
+        cargo_ndk = roles["$TOOL_ROOT"] / "bin/cargo-ndk"
+        cargo_ndk.parent.mkdir()
+        cargo_ndk.write_bytes(b"synthetic cargo-ndk")
+        receipt["cargo_ndk_executable_sha256"] = v.sha256(cargo_ndk.read_bytes())
+        sdk = roles["$DEVELOPER_DIR"] / "sdk"
+        sdk.mkdir()
+        smoke_source = roles["$SCRATCH"] / "sdr-version-smoke.c"
+        smoke_source.write_text('#include "sdr_fox.h"\n#include <stdio.h>\n#include <string.h>\nint main(void) {\n    const char *version = sdrfox_version();\n    if (version == NULL || strcmp(version, "0.1.0") != 0) return 1;\n    return puts(version) < 0 ? 2 : 0;\n}\n')
+        executable = roles["$SCRATCH"] / "sdr-version-smoke"
+        executable.write_bytes(b"synthetic executable; execution is mocked")
+        executable.chmod(0o700)
+        by_role = {a["role"]: a for a in expected["artifacts"]}
+        smoke = {"status": "pass", "expected_version": "0.1.0", "version": "0.1.0", "link_exit_code": 0, "run_exit_code": 0,
+                 "source_path": "$SCRATCH/sdr-version-smoke.c", "source_sha256": v.sha256(smoke_source.read_bytes()),
+                 "executable_path": "$SCRATCH/sdr-version-smoke", "executable_sha256": v.sha256(executable.read_bytes()),
+                 "header_sha256": by_role["c_header"]["sha256"], "archive_sha256": by_role["macos_archive"]["sha256"],
+                 "stdout_sha256": v.sha256(b"0.1.0\n"), "sdk_path": "$DEVELOPER_DIR/sdk"}
+        smoke["sdk_path_log"] = command("apple-sdk-path", ["xcrun", "--sdk", "macosx", "--show-sdk-path"], str(sdk) + "\n")
+        smoke["link_log"] = command("macos-c-link-smoke", [str(roles["$DEVELOPER_DIR"] / "clang"), "-std=c11", "-Wall", "-Wextra", "-Werror", "-arch", "arm64",
+            "-mmacosx-version-min=14.0", "-isysroot", str(sdk), "-I", str(artifacts), str(smoke_source), str(artifacts / "libsdr_fox_ffi.a"),
+            "-framework", "IOKit", "-framework", "CoreFoundation", "-liconv", "-lSystem", "-o", str(executable)], "")
+        smoke["run_log"] = command("macos-c-run-smoke", [str(executable)], "0.1.0\n")
+        receipt["c_link_smoke"] = smoke
+        ndk_bin = roles["$NDK_HOME"] / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
+        ndk_bin.mkdir(parents=True)
+        (ndk_bin / "clang-18").write_bytes(b"synthetic clang")
+        (ndk_bin / "clang").symlink_to("clang-18")
+        (ndk_bin / "ld.lld").write_bytes(b"synthetic linker")
+        rows, raw_build = [], ""
+        for abi, target in v.ANDROID_TARGETS.items():
+            wrapper = {"ANDROID_PLATFORM": "21", "ANDROID_ABI": abi,
+                       "_CARGO_NDK_LINK_CLANG": str(ndk_bin / "clang"), "_CARGO_NDK_LINK_TARGET": "--target=" + target + "21",
+                       "CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER": str(cargo_ndk)}
+            rustc = [str(roles["$RUSTUP_HOME"] / "toolchains/1.95.0-aarch64-apple-darwin/bin/rustc"), "--crate-name", "sdr_fox_jni", "--crate-type", "cdylib", "--target", target, "-C", "linker=" + str(cargo_ndk)]
+            raw_build += "Building " + abi + " (" + target + ")\n" + "".join("Exporting " + key + "=" + json.dumps(value) + "\n" for key, value in wrapper.items())
+            raw_build += "Running `" + " ".join(rustc) + "`\n"
+            rows.append({"abi": abi, "rust_target": target, "api_level": 21, "clang_target": "--target=" + target + "21",
+                         "clang_path": "$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang", "linker_path": "$TOOL_ROOT/bin/cargo-ndk",
+                         "rustc_argv": [v.normalized_paths(arg, roles) for arg in rustc],
+                         "wrapper_assignments": {key: v.normalized_paths(value, roles) for key, value in wrapper.items()}})
+        build_ref = command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], raw_build)
+        probe = roles["$SCRATCH"] / "android-driver.c"
+        probe.write_text("int main(void) { return 0; }\n")
+        for row in rows:
+            target = row["rust_target"]
+            triple = target.replace("-linux-", "-unknown-linux-") + "21"
+            library = ndk_bin.parent / "sysroot/usr/lib" / target / "21"
+            printed = str(ndk_bin) + "/../sysroot/usr/lib/" + target + "/21"
+            linker_argv = [str(ndk_bin / "ld.lld"), "-shared", printed + "/crtbegin_so.o", "-L" + printed, printed + "/crtend_so.o"]
+            log = " ".join(json.dumps(arg) for arg in [str(ndk_bin / "clang-18"), "-cc1", "-triple", triple]) + "\n"
+            log += " ".join(json.dumps(arg) for arg in linker_argv) + "\n"
+            ref = command("android-clang-" + target, [str(ndk_bin / "clang"), row["clang_target"], "-###", "-shared", "-fPIC", "-x", "c", str(probe), "-o", str(roles["$SCRATCH"] / ("android-driver-" + row["abi"]))], log)
+            row["build_log"] = build_ref
+            row["clang_driver"] = {"cc1_triple": triple, "api_level": 21, "platform_library_path": v.normalized_paths(str(library), roles),
+                "crt_objects": [v.normalized_paths(str(library / name), roles) for name in ("crtbegin_so.o", "crtend_so.o")],
+                "linker_argv": [v.normalized_paths(arg, roles) for arg in linker_argv], "log": ref, "probe_source_sha256": v.sha256(probe.read_bytes())}
+        receipt["android_effective_commands"] = rows
+        path = evidence / "build-receipt.json"
+        path.write_text(json.dumps(receipt))
+        return receipt, path, artifacts, roles, expected, apple
+
+    def smoke_command(self, roles):
+        def run(argv, **kwargs):
+            if argv[0] == "/usr/bin/xcrun":
+                return str(roles["$DEVELOPER_DIR"] / "sdk") + "\n"
+            self.assertEqual(argv, [str(roles["$SCRATCH"] / "sdr-version-smoke")])
+            self.assertEqual(kwargs.get("timeout"), 15)
+            return "0.1.0\n"
+        return run
+
+    def test_complete_measured_receipt_reparses_logs_and_replays_bound_smoke(self):
+        receipt, path, artifacts, roles, expected, apple = self.measured_fixture()
+        with patch.object(v, "build_path_roles", return_value=roles), patch.object(v, "observed_apple_tools", return_value=apple), patch.object(v, "run", side_effect=self.smoke_command(roles)):
+            result = v.verify_build_evidence(path, roles["$SOURCE"], artifacts, roles["$NDK_HOME"], expected)
+        self.assertEqual(result["c_link_smoke"]["independent_run"], "pass")
+        self.assertEqual(len(result["android_targets"]), 2)
+        self.assertNotIn(str(self.root), json.dumps(result))
+        report = v.Report()
+        report.check("synthetic", lambda: result)
+        self.assertFalse(report.result(expected)["fresh_build_proven"])
+
+    def test_missing_smoke_failed_link_wrong_version_or_stdout_cannot_pass(self):
+        receipt, path, artifacts, roles, expected, apple = self.measured_fixture()
+        for changed in (None, receipt["c_link_smoke"] | {"link_exit_code": 1}, receipt["c_link_smoke"] | {"version": "0.2.0"}, receipt["c_link_smoke"] | {"stdout_sha256": "0" * 64}):
+            with patch.object(v, "run", side_effect=self.smoke_command(roles)), self.assertRaises(v.VerificationError):
+                v.verify_c_smoke(receipt | {"c_link_smoke": changed}, path.parent, artifacts, roles, expected, apple)
+
+    def test_smoke_executable_tamper_rejected_before_execution(self):
+        receipt, path, artifacts, roles, expected, apple = self.measured_fixture()
+        (roles["$SCRATCH"] / "sdr-version-smoke").write_bytes(b"different executable")
+        with patch.object(v, "run") as execute:
+            self.fails("c-link-smoke-executable-mismatch", lambda: v.verify_c_smoke(receipt, path.parent, artifacts, roles, expected, apple))
+        execute.assert_not_called()
+
+    def test_independent_smoke_rerun_failure_is_not_hidden_by_success_receipt(self):
+        receipt, path, artifacts, roles, expected, apple = self.measured_fixture()
+        results = [str(roles["$DEVELOPER_DIR"] / "sdk") + "\n", v.VerificationError("inspection-command-failed")]
+        with patch.object(v, "run", side_effect=results):
+            self.fails("inspection-command-failed", lambda: v.verify_c_smoke(receipt, path.parent, artifacts, roles, expected, apple))
+
+    def test_changed_live_apple_tool_or_kernel_rejects_old_observation(self):
+        receipt, path, _, roles, _, apple = self.measured_fixture()
+        for section, field, value in (("apple_clang", "sha256", "0" * 64), ("apple_nm", "version", "different"), ("darwin", "release", "26.0.0")):
+            actual = copy.deepcopy(apple)
+            actual[section][field] = value
+            with self.subTest(section=section), self.assertRaises(v.VerificationError):
+                v.verify_observed_tools(receipt, path.parent, roles, actual)
+        with self.assertRaises(v.VerificationError):
+            v.verify_observed_tools(receipt | {"observed_tools": {}}, path.parent, roles, apple)
+
+    def test_android_declared_api_or_linker_cannot_override_measured_log(self):
+        receipt, path, _, roles, expected, _ = self.measured_fixture()
+        for key, value in (("api_level", 22), ("linker_path", "$TOOL_ROOT/bin/other"), ("rust_target", "wrong-target")):
+            altered = copy.deepcopy(receipt)
+            altered["android_effective_commands"][0][key] = value
+            with self.subTest(key=key), self.assertRaises(v.VerificationError):
+                v.verify_android_observations(altered, path.parent, roles, expected)
+
+    def test_android_measured_wrong_api_missing_compiler_and_duplicate_abi_fail(self):
+        receipt, path, _, roles, _, _ = self.measured_fixture()
+        _, log = v.checked_command(receipt, path.parent, "build-android")
+        for changed in (log.replace('ANDROID_PLATFORM="21"', 'ANDROID_PLATFORM="22"'), log.replace("--crate-name sdr_fox_jni", "--crate-name other"), log + log):
+            with self.assertRaises(v.VerificationError):
+                v.parse_android_build(changed, roles)
+
+    def test_clang_actual_api22_crt_and_unpinned_tool_are_rejected(self):
+        receipt, path, _, roles, _, _ = self.measured_fixture()
+        _, log = v.checked_command(receipt, path.parent, "android-clang-aarch64-linux-android")
+        for changed in (log.replace("/21/", "/22/"), log.replace("android21", "android22"), log.replace("clang-18", "clang-unknown")):
+            with self.assertRaises(v.VerificationError):
+                v.parse_clang_driver(changed, "aarch64-linux-android", roles)
+
     def package_fixture(self):
         source, cargo = self.root / "source", self.root / "cargo"
         source.mkdir()
