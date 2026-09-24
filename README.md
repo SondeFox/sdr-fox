@@ -57,7 +57,10 @@ and consumer examples and contracts are in
 
 ## Build and test
 
-Rust 1.86 or newer is required.
+CI uses Rust 1.95.0 as its tested compiler baseline, also selected by the manual
+[current-pin reproduction workflow](docs/CLEAN_REPRODUCTION.md). `Cargo.toml`
+still declares Rust 1.86 as the minimum; compatibility with 1.86 is not
+validated by these CI gates. Compiler baseline updates are reviewed changes.
 
 ```sh
 cargo fmt --all -- --check
