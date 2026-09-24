@@ -44,7 +44,7 @@ and the bounded-queue drop policy mean the same thing on both. See
 
 `rusb` and `libusb1-sys` are excluded from the Android target by Cargo target
 tables in `crates/sdr-fox-transport/Cargo.toml`, so the Android `.so` links
-**no libusb code**. libusb remains the desktop macOS default; desktop binary
+**no libusb code**. macOS also uses nusb; Linux/Windows fallback binary
 distribution notes are documented in §4 of the repository `NOTICE`.
 
 Verify this before shipping an APK. `[profile.release]` sets `strip = "symbols"`
@@ -58,11 +58,11 @@ SO=target/aarch64-linux-android/release/libsdr_fox_jni.so
 strings -a $SO | grep -c -i libusb        # must be 0
 strings -a $SO | grep -F -c "$HOME"        # must be 0
 $NDK/llvm-readelf -d $SO | grep NEEDED    # liblog/libdl/libm/libc
-$NDK/llvm-nm -D --defined-only $SO | grep -c Java_com_sdrfox_SdrFox_native  # 17
+$NDK/llvm-nm -D --defined-only $SO | grep -c Java_com_sdrfox_SdrFox_native  # 18
 ```
 
 On the current build those report 0, the four Android system libraries above,
-and 17 respectively.
+and 18 respectively.
 
 ## Gradle integration
 
@@ -95,7 +95,8 @@ SdrUsbPermission.request(context, usbManager, device) { granted ->
     val (connection, fd) = usbManager.openSdr(device) ?: return@request
     try {
         val kind = SdrUsbIds.matches(device) ?: return@request
-        SdrFox.open(fd, kind, device.productName)?.use { sdr ->
+        SdrFox.openUsbDevice(fd, kind, device.vendorId, device.productId,
+            device.manufacturerName, device.productName)?.use { sdr ->
             sdr.frequency = 100_000_000L
             sdr.setSampleRate(2_048_000)
             sdr.biasTee = true
@@ -116,9 +117,13 @@ SdrUsbPermission.request(context, usbManager, device) { granted ->
 }
 ```
 
-Pass `UsbDevice.productName` so Airspy Mini is not silently configured as an
-R2. For a ROM that omits product strings, call `SdrFox.open` with
-`Kind.AIRSPY_MINI` explicitly.
+Pass the actual IDs and manufacturer/product names from that same authorized
+`UsbDevice`. Complete identity lets the existing strict Blog V4 detector choose
+its 28.8 MHz tuner clock; generic R828D remains at 16 MHz. Missing descriptors
+do not imply V4. The original `SdrFox.open(fd, kind, productName)` API and native
+entry point remain compatible but cannot identify V4. For Airspy Mini on a ROM
+that omits product strings, select `Kind.AIRSPY_MINI` explicitly. No serial is
+needed. See [the identity regression record](../../docs/ANDROID_USB_IDENTITY.md).
 
 ### Hold the `UsbDeviceConnection` open
 

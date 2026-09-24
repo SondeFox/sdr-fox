@@ -40,6 +40,39 @@ typedef struct SdrFoxStream SdrFoxStream;
 typedef uint32_t SdrFoxKind;
 
 /**
+ * Fixed-size receiver descriptor. Strings are UTF-8 and NUL-terminated;
+ * oversized identities are excluded rather than truncated into collisions.
+ */
+typedef struct SdrFoxReceiver {
+  /**
+   * Opaque exact-selection identity; treat as private user device metadata.
+   */
+  char id[512];
+  /**
+   * Hardware-reported label or family fallback.
+   */
+  char label[256];
+  /**
+   * `SDRFOX_KIND_RTLSDR` or `SDRFOX_KIND_AIRSPY`.
+   */
+  uint32_t kind;
+} SdrFoxReceiver;
+
+/**
+ * One hardware-reported discrete gain value.
+ */
+typedef struct SdrFoxGainStep {
+  /**
+   * -1 = OVERALL, 0 = LNA, 1 = MIXER, 2 = VGA.
+   */
+  int32_t stage;
+  /**
+   * Gain in tenths of dB (Airspy register steps are value * 10).
+   */
+  int32_t tenths_db;
+} SdrFoxGainStep;
+
+/**
  * Integer sample-format selector accepted by [`sdrfox_start_stream`].
  *
  * Like [`SdrFoxKind`], this is an integer typedef rather than an enum so an
@@ -159,6 +192,65 @@ extern "C" {
  * `out` must be a valid, non-null pointer to a `sdrfox_device*` slot.
  */
  const char *sdrfox_open_index(uintptr_t index, SdrFoxKind kind, struct SdrFoxDevice **out);
+
+/**
+ * Enumerate supported receivers without opening hardware. Returns required
+ * count (copies at most capacity entries), or -1. Re-run if count grew.
+ * `out` must hold capacity writable entries; null is permitted for capacity 0.
+ */
+ intptr_t sdrfox_enumerate(struct SdrFoxReceiver *out, uintptr_t capacity);
+
+/**
+ * Open only the selected receiver; no auto-detection/index fallback occurs.
+ * `id` must point to a NUL-terminated UTF-8 string no longer than 511 bytes;
+ * `out` is cleared before any IO. Returns null on success or thread-local error.
+ */
+ const char *sdrfox_open_id(const char *id, struct SdrFoxDevice **out);
+
+/**
+ * Set a rate and report the actual applied rate atomically. Never infer DSP
+ * rate from the request. On failure *actual is zero.
+ */
+ int sdrfox_set_sample_rate_actual(struct SdrFoxDevice *dev, uint32_t hz, uint32_t *actual);
+
+/**
+ * Query exact hardware sample rates. Empty means continuous/nonenumerable.
+ * Returns required count, or -1. Copies at most capacity entries.
+ */
+ intptr_t sdrfox_sample_rates(struct SdrFoxDevice *dev, uint32_t *out, uintptr_t capacity);
+
+/**
+ * Query gain steps from the opened tuner. Returns required count, or -1.
+ */
+
+intptr_t sdrfox_gain_steps(struct SdrFoxDevice *dev,
+                           struct SdrFoxGainStep *out,
+                           uintptr_t capacity);
+
+/**
+ * Apply a named hardware stage; invalid integer codes fail before IO.
+ */
+ int sdrfox_set_stage_gain(struct SdrFoxDevice *dev, int32_t stage, int32_t tenths_db);
+
+/**
+ * Set independent LNA or mixer AGC where supported.
+ */
+ int sdrfox_set_stage_agc(struct SdrFoxDevice *dev, int32_t stage, int on);
+
+/**
+ * Select manual/automatic tuner gain mode independently of digital AGC.
+ */
+ int sdrfox_set_gain_mode(struct SdrFoxDevice *dev, int automatic);
+
+/**
+ * Set IF bandwidth where hardware supports it.
+ */
+ int sdrfox_set_bandwidth(struct SdrFoxDevice *dev, uint32_t hz);
+
+/**
+ * Read the known reference oscillator rate; zero means unavailable.
+ */
+ uint32_t sdrfox_reference_clock(struct SdrFoxDevice *dev);
 
 /**
  * Close a device handle. Idempotent; null, stale, and repeated handles are

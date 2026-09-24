@@ -2,12 +2,10 @@
 //!
 //! USB transport abstraction for sdr-fox with four implementations:
 //!
-//! - [`RusbTransport`] — libusb-backed (`rusb`). **macOS desktop default**
-//!   (nusb's IOKit backend stalls RTL2832U control-OUT transfers; libusb
-//!   works, as `rtl_test` confirms). Reliable cross-platform fallback.
-//!   Desktop only: not compiled for Android (see `NusbFdTransport`).
-//! - [`NusbTransport`] — pure-Rust (`nusb`). Default on Linux/Windows
-//!   (no libusb dylib). Works for control-IN but stalls control-OUT on macOS.
+//! - `RusbTransport` — Linux/Windows-only fallback; never compiled on macOS
+//!   or Android.
+//! - [`NusbTransport`] — pure-Rust USB on macOS/Linux/Windows. macOS uses
+//!   the published, unmodified nusb 0.2.7 IOKit path.
 //! - `NusbFdTransport` — pure-Rust (`nusb`) over an Android-injected fd.
 //!   The only transport compiled for Android. Uses `nusb::Device::from_fd`,
 //!   so the Android `.so` contains no libusb code.
@@ -19,8 +17,7 @@
 //!
 //! ## Which backend opens what
 //!
-//! [`open_default`] picks the right backend for the platform: `rusb` on macOS,
-//! `nusb` elsewhere. Driver crates should call `open_default` rather than
+//! [`open_default`] picks the right backend for the platform: `nusb` on macOS, with a rusb fallback on Linux/Windows. Driver crates should call `open_default` rather than
 //! hard-coding a backend. Android does not enumerate the bus and reaches the
 //! device through `NusbFdTransport` instead.
 
@@ -52,9 +49,9 @@ pub mod nusb_backend;
 // libusb. See docs/LIBUSB-REMOVAL-PLAN.md.
 #[cfg(target_os = "android")]
 pub mod nusb_fd;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub mod rusb_async;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub mod rusb_backend;
 pub mod stream;
 
@@ -62,9 +59,9 @@ pub use mock::{MockTransport, RecordedRequest, ScriptedReply};
 pub use nusb_backend::NusbTransport;
 #[cfg(target_os = "android")]
 pub use nusb_fd::NusbFdTransport;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub use rusb_async::RusbAsyncSource;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 pub use rusb_backend::{RusbBufferSource, RusbTransport};
 pub use stream::{
     convert_cu8_block, start_stream, BufferSource, Stream, StreamControl, StreamStats,
@@ -167,9 +164,7 @@ pub fn enumerate_usb_devices() -> Result<Vec<UsbDeviceLocation>, sdr_fox_core::S
 /// Open the platform-default transport for the `index`-th device matching
 /// `(vendor_id, product_id)`.
 ///
-/// On macOS this uses [`RusbTransport`] (libusb) because nusb's IOKit backend
-/// stalls RTL2832U control-OUT transfers; elsewhere it uses [`NusbTransport`]
-/// (pure-Rust, no libusb dylib). Falls back to the other backend on failure.
+/// macOS uses only [`NusbTransport`]; Linux/Windows retain the rusb fallback.
 ///
 /// Not meaningful on Android: an unprivileged Android process cannot enumerate
 /// the USB bus, so a device is never opened by VID/PID/index. The Android path
@@ -186,15 +181,9 @@ pub fn open_default(
     product_id: u16,
     index: usize,
 ) -> Result<Box<dyn sdr_fox_core::Transport>, sdr_fox_core::SdrError> {
-    // macOS: prefer rusb (libusb) — nusb stalls RTL2832U control-OUTs here.
+    // macOS: published nusb only; no libusb fallback enters this target.
     #[cfg(target_os = "macos")]
     {
-        match RusbTransport::open(vendor_id, product_id, index) {
-            Ok(t) => return Ok(Box::new(t)),
-            Err(e) => {
-                tracing::debug!("rusb open failed, falling back to nusb: {e}");
-            }
-        }
         NusbTransport::open(vendor_id, product_id, index)
             .map(|t| Box::new(t) as Box<dyn sdr_fox_core::Transport>)
     }
@@ -212,11 +201,145 @@ pub fn open_default(
     }
 }
 
+/// Stable identity for exact selection. macOS uses the USB topology location
+/// plus full manufacturer/product/serial descriptors; enumeration order is
+/// irrelevant. Identical full descriptors cannot prove physical continuity.
+/// Moving an unnumbered receiver requires deliberate reselection.
+#[cfg(not(target_os = "android"))]
+fn stable_usb_id(info: &nusb::DeviceInfo) -> String {
+    #[cfg(target_os = "macos")]
+    let location = format!("{:08x}", info.location_id());
+    #[cfg(not(target_os = "macos"))]
+    let location = format!("{}-{}", info.bus_id(), info.device_address());
+    stable_usb_id_parts(
+        info.vendor_id(),
+        info.product_id(),
+        &location,
+        info.manufacturer_string(),
+        info.product_string(),
+        info.serial_number(),
+    )
+}
+
+// Separate from OS-owned DeviceInfo for deterministic replacement tests.
+// Hex is lossless UTF-8 with delimiters between components; never truncate an
+// identity. The C enumeration boundary excludes IDs >=512 bytes.
+#[cfg(not(target_os = "android"))]
+fn stable_usb_id_parts(
+    vid: u16,
+    pid: u16,
+    location: &str,
+    manufacturer: Option<&str>,
+    product: Option<&str>,
+    serial: Option<&str>,
+) -> String {
+    use std::fmt::Write;
+    let mut id = format!("usb:{vid:04x}:{pid:04x}:{location}");
+    for component in [manufacturer, product, serial] {
+        id.push(':');
+        for byte in component.unwrap_or("").bytes() {
+            let _ = write!(id, "{byte:02x}");
+        }
+    }
+    id
+}
+
+/// Enumerate stable identifiers paired with lightweight USB metadata.
+#[cfg(not(target_os = "android"))]
+pub fn enumerate_stable_usb_devices(
+) -> Result<Vec<(String, UsbDeviceLocation)>, sdr_fox_core::SdrError> {
+    use nusb::MaybeFuture;
+    let devices = nusb::list_devices()
+        .wait()
+        .map_err(|e| sdr_fox_core::SdrError::Transport(format!("nusb list: {e}")))?;
+    let mut counts = std::collections::HashMap::new();
+    Ok(devices
+        .map(|d| {
+            (
+                stable_usb_id(&d),
+                location_for_device(
+                    d.vendor_id(),
+                    d.product_id(),
+                    d.manufacturer_string(),
+                    d.product_string(),
+                    d.serial_number(),
+                    &mut counts,
+                ),
+            )
+        })
+        .collect())
+}
+
+/// Open the exact current native USB object matching an opaque stable ID.
+/// Duplicate identities and disappeared devices fail closed. No index fallback.
+#[cfg(not(target_os = "android"))]
+pub fn open_stable_usb(
+    id: &str,
+) -> Result<(UsbDeviceLocation, Box<dyn sdr_fox_core::Transport>), sdr_fox_core::SdrError> {
+    use nusb::MaybeFuture;
+    let mut matches = nusb::list_devices()
+        .wait()
+        .map_err(|e| sdr_fox_core::SdrError::Transport(format!("nusb list: {e}")))?
+        .filter(|d| stable_usb_id(d) == id);
+    let info = matches.next().ok_or_else(|| {
+        sdr_fox_core::SdrError::DeviceNotFound("selected receiver disconnected".into())
+    })?;
+    if matches.next().is_some() {
+        return Err(sdr_fox_core::SdrError::DeviceNotFound(
+            "receiver identity is ambiguous".into(),
+        ));
+    }
+    let location = location_for_device(
+        info.vendor_id(),
+        info.product_id(),
+        info.manufacturer_string(),
+        info.product_string(),
+        info.serial_number(),
+        &mut std::collections::HashMap::new(),
+    );
+    let transport = NusbTransport::open_info(&info)?;
+    Ok((location, Box::new(transport)))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use super::*;
+
+    #[test]
+    fn exact_identity_rejects_different_models_with_same_serial_on_same_port() {
+        let id = |manufacturer, product| {
+            stable_usb_id_parts(
+                0x0bda,
+                0x2838,
+                "fixed-port",
+                Some(manufacturer),
+                Some(product),
+                Some("00000001"),
+            )
+        };
+        let nooelec = id("Nooelec", "NESDR SMArt");
+        let blog = id("RTLSDRBlog", "Blog V4");
+        assert_ne!(nooelec, blog);
+        assert_eq!(blog, id("RTLSDRBlog", "Blog V4"));
+        assert_ne!(blog, id("RTLSDRBlog", "Blog V3"));
+        assert_ne!(blog, id("Other", "Blog V4"));
+    }
+
+    #[test]
+    fn descriptor_identity_encoding_is_lossless_and_component_delimited() {
+        let long = "a".repeat(300);
+        let id = |manufacturer, product| {
+            stable_usb_id_parts(1, 2, "port", Some(manufacturer), Some(product), None)
+        };
+        assert_ne!(id("a:b", "c"), id("a", "b:c"));
+        assert_ne!(id("é", "device"), id("e", "device"));
+        // Long fields must not silently share a truncated identity. The C
+        // boundary omits these entries because they do not fit its record.
+        assert_ne!(id(&long, "x"), id(&long, "y"));
+        assert!(id(&long, "x").len() >= 512);
+    }
 
     #[test]
     fn bus_strings_map_onto_the_location_and_absent_ones_stay_none() {

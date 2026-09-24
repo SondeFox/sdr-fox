@@ -191,8 +191,14 @@ not, so raw captures stay raw.
 
 ## Gotchas
 
-- **macOS live hardware**: the default opener uses a device-local rusb/libusb
-  context because nusb's IOKit control-OUT path can stall on RTL2832U devices.
+- **macOS live hardware**: the backend uses the published, unmodified nusb
+  0.2.7. The C ABI selects 256 KiB raw transfers for macOS Airspy, with
+  fixed 4/4/1 MiB inflight/raw/CF32 payload budgets (16/16/2 blocks) and
+  its synthesis bridge retained. The prior 1/2/1 profile remains a diagnostic
+  control; the larger budget adds 5 MiB, not a CPU or losslessness guarantee.
+  Other receiver/platform
+  defaults are unchanged. Small aligned reads preserve the unread suffix of a
+  synthesized block; one C read is not necessarily one USB completion.
 - **Android**: use `SdrFox.open(fd, kind, productName)` with the fd from
   `UsbDeviceConnection.getFileDescriptor()`. USB permission is the app's job
   (`SdrUsbPermission.request`). Streams pull into writable direct
