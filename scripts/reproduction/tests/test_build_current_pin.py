@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("build_current_pin", Path(__file__).resolve().parents[1] / "build_current_pin.py")
 build = importlib.util.module_from_spec(SPEC)
@@ -165,6 +165,76 @@ class FailureEvidenceTests(unittest.TestCase):
             (root / 'file').write_text('test'); (root / 'link').symlink_to(root / 'file')
             with self.assertRaises(build.BuildError):
                 worker.copy_artifact(root / 'link', 'libsdr_fox_ffi.a')
+
+
+class MetadataPrefetchTests(unittest.TestCase):
+    def worker(self, directory):
+        root = Path(directory)
+        header = root / "bindings/sdr_fox.h"
+        header.parent.mkdir()
+        header.write_bytes(b"original reviewed header\n")
+        return build.Builder(root, root / "evidence", {}), header
+
+    def test_metadata_only_locked_target_dependency_is_fetched_before_offline_query(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker, header = self.worker(directory)
+            cache = set()
+            commands = []
+            # Model the observed cold-host failure: this Windows package is
+            # locked but is absent from Mac/Android-only fetches. No real Cargo
+            # process, registry download, or generated dependency is used here.
+            metadata_only_package = ("anstyle-wincon", "3.0.11")
+            def cargo(label, argv, **kwargs):
+                commands.append((label, argv))
+                self.assertIn("--locked", argv)
+                if argv[1] == "fetch":
+                    self.assertNotIn("CARGO_NET_OFFLINE", worker.env)
+                    if "--target" not in argv:
+                        cache.add(metadata_only_package)
+                elif argv[1] == "metadata":
+                    self.assertEqual(worker.env["CARGO_NET_OFFLINE"], "true")
+                    self.assertIn("--offline", argv)
+                    self.assertIn("--all-features", argv)
+                    self.assertNotIn("--filter-platform", argv)
+                    self.assertNotIn("--no-deps", argv)
+                    self.assertEqual(argv[-1], str(worker.source / "crates/sdr-fox-cabi/Cargo.toml"))
+                    if metadata_only_package not in cache:
+                        raise build.BuildError("missing locked metadata-only package")
+                else:
+                    self.fail("Unexpected compilation during metadata preparation")
+                return ""
+            worker.command = cargo
+            worker.prefetch_locked_metadata()
+            self.assertEqual([label for label, _ in commands], ["fetch-locked-crates", "preflight-cabi-metadata"])
+            self.assertEqual(header.read_bytes(), b"original reviewed header\n")
+            self.assertEqual(worker.env["CARGO_NET_OFFLINE"], "true")
+
+    def test_fetch_failure_does_not_query_metadata_remove_header_or_compile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker, header = self.worker(directory)
+            compiler = Mock()
+            worker.command = Mock(side_effect=build.BuildError("controlled locked fetch failure"))
+            with self.assertRaises(build.BuildError):
+                worker.prefetch_locked_metadata()
+                build.build_regenerating_header(header, compiler)
+            self.assertEqual(worker.command.call_count, 1)
+            compiler.assert_not_called()
+            self.assertEqual(header.read_bytes(), b"original reviewed header\n")
+            self.assertEqual(worker.receipt["artifacts"], [])
+
+    def test_offline_metadata_failure_preserves_header_and_prevents_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker, header = self.worker(directory)
+            compiler = Mock()
+            worker.command = Mock(side_effect=["", build.BuildError("controlled offline metadata failure")])
+            with self.assertRaises(build.BuildError):
+                worker.prefetch_locked_metadata()
+                build.build_regenerating_header(header, compiler)
+            self.assertEqual(worker.command.call_count, 2)
+            compiler.assert_not_called()
+            self.assertEqual(header.read_bytes(), b"original reviewed header\n")
+            self.assertEqual(worker.env["CARGO_NET_OFFLINE"], "true")
+            self.assertEqual(worker.receipt["artifacts"], [])
 
 
 if __name__ == '__main__':
