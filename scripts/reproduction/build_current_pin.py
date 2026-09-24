@@ -22,10 +22,13 @@ import sys
 import tempfile
 import time
 
-SOURCE_COMMIT = "fb34d8c600725b54c5a950234c892a593c343968"
-SOURCE_TREE = "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
-SOURCE_ROOT = "7bcb45cd2a993240abe7f41dcaeec4a84bc04aeb"
-LOCK_SHA256 = "62ab5b79776c322f9776c8c41f8a6707fac6dfcf6a49b791fcb30e10999b4f76"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from profiles import HISTORICAL, LOCK_SHA256, PROFILES, SOURCE_ROOT, load_manifest, select_profile
+from page_layout import check_link_args
+
+# Retain the historical API/default while profiles hold subject identities.
+SOURCE_COMMIT = HISTORICAL.source_commit
+SOURCE_TREE = HISTORICAL.source_tree
 ORIGINS = {"https://github.com/SondeFox/sdr-fox", "https://github.com/SondeFox/sdr-fox.git"}
 RUST_TOOLCHAIN = "1.95.0-aarch64-apple-darwin"
 RUSTC_VERSION = "rustc 1.95.0 (59807616e 2026-04-14)"
@@ -93,14 +96,14 @@ def remap_flags(source: Path, home: Path) -> str:
             f"--remap-path-prefix={home}=/home/builder")
 
 
-def guard_source(source: Path, query) -> None:
+def guard_source(source: Path, query, profile=HISTORICAL) -> None:
     require(query(["git", "remote"]).splitlines() == ["origin"], "Only canonical origin is allowed")
     for args in (["git", "remote", "get-url", "--all", "origin"],
                  ["git", "remote", "get-url", "--push", "--all", "origin"]):
         urls = query(args).splitlines()
         require(len(urls) == 1 and urls[0] in ORIGINS, "Unexpected source origin")
-    require(query(["git", "rev-parse", "HEAD"]).strip() == SOURCE_COMMIT, "Source commit mismatch")
-    require(query(["git", "rev-parse", "HEAD^{tree}"]).strip() == SOURCE_TREE, "Source tree mismatch")
+    require(query(["git", "rev-parse", "HEAD"]).strip() == profile.source_commit, "Source commit mismatch")
+    require(query(["git", "rev-parse", "HEAD^{tree}"]).strip() == profile.source_tree, "Source tree mismatch")
     require(query(["git", "rev-list", "--max-parents=0", "HEAD"]).splitlines() == [SOURCE_ROOT], "Source root mismatch")
     require(not query(["git", "status", "--porcelain", "--untracked-files=all"]).strip(), "Source checkout is not clean")
     require(sha256(source / "Cargo.lock") == LOCK_SHA256, "Cargo.lock mismatch")
@@ -243,14 +246,19 @@ def parse_android_clang(log, target, ndk):
 
 
 class Builder:
-    def __init__(self, source: Path, evidence: Path, env: dict[str, str]):
+    def __init__(self, source: Path, evidence: Path, env: dict[str, str], profile=HISTORICAL):
+        require(profile in PROFILES, "Unreviewed reconstruction profile")
+        self.profile = profile
+        self.manifest = load_manifest(profile) if profile != HISTORICAL else None
         self.source, self.evidence = source, evidence
         self.original_env = env
         self.deadline = time.monotonic() + BUILD_SECONDS
-        self.receipt = {"schema": 1, "status": "running", "source_commit": SOURCE_COMMIT,
-                        "source_tree": SOURCE_TREE, "source_root": SOURCE_ROOT,
+        self.receipt = {"schema": 1, "status": "running", "source_commit": profile.source_commit,
+                        "source_tree": profile.source_tree, "source_root": SOURCE_ROOT,
                         "lock_sha256": LOCK_SHA256, "commands": [], "artifacts": [],
                         "scope": "One hosted reconstruction attempt; acceptance belongs to independent verifier"}
+        if self.manifest:
+            self.receipt.update(reconstruction_profile=profile.name, expected_manifest_sha256=self.manifest.sha256)
         self.evidence.mkdir(parents=False, exist_ok=False)
         (self.evidence / "logs").mkdir()
         self.env = {key: env[key] for key in ("HOME", "PATH", "TMPDIR", "DEVELOPER_DIR", "ANDROID_SDK_ROOT") if key in env}
@@ -383,6 +391,8 @@ class Builder:
         source = scratch / "android-driver.c"
         source.write_text(ANDROID_PROBE_SOURCE)
         for row in observations:
+            if self.profile.android_link_args:
+                row["page_link_args"] = check_link_args(row["rustc_argv"], self.profile.android_link_args)
             target = row["rust_target"]
             label = "android-clang-" + target
             output = self.command(label, [row["clang_path"], row["clang_target"], "-###", "-shared", "-fPIC", "-x", "c",
@@ -434,10 +444,10 @@ class Builder:
         home = Path(env["HOME"]).resolve()
         require(self.source == Path(env["GITHUB_WORKSPACE"]).resolve() / "fixed-source", "Unexpected source checkout path")
         require(self.evidence == runner_temp / "sondefox-reproduction", "Unexpected evidence output path")
-        require(self.env.get("DEVELOPER_DIR") == "/Applications/Xcode_26.6.app/Contents/Developer", "Unexpected Xcode selection")
-        require(Path(self.env["DEVELOPER_DIR"]).is_dir(), "Required Xcode 26.6 is unavailable")
+        require(self.env.get("DEVELOPER_DIR") == self.profile.developer_directory, "Unexpected Xcode selection")
+        require(Path(self.env["DEVELOPER_DIR"]).is_dir(), "Required Xcode is unavailable")
         self.receipt["runner"] = {key: env.get(key) for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "RUNNER_OS", "RUNNER_ARCH", "RUNNER_ENVIRONMENT", "ImageOS", "ImageVersion")}
-        guard_source(self.source, lambda args: self.command("source-check", args, query=True))
+        guard_source(self.source, lambda args: self.command("source-check", args, query=True), self.profile)
         scratch = runner_temp / "sondefox-reproduction-scratch"
         scratch.mkdir(exist_ok=False)
         rustup_home = runner_temp / "sondefox-reproduction-rustup"
@@ -452,14 +462,16 @@ class Builder:
                             ("sdk", ["xcrun", "--sdk", "macosx", "--show-sdk-version"]),
                             ("rustup", ["rustup", "--version"]),
                             ("python", [sys.executable, "--version"])):
-            self.command(label, args)
+            observed = self.command(label, args, query=label == "xcode" and self.profile.xcode_identity is not None)
+            if label == "xcode" and self.profile.xcode_identity is not None:
+                require(observed.strip() == self.profile.xcode_identity, "Candidate Xcode version/build mismatch")
         apple_tools = self.observe_apple_tools()
         self.receipt["bootstrap_executables"] = {
             tool: sha256(Path(shutil.which(tool, path=self.env["PATH"])))
             for tool in ("rustup", "python3")
         }
         source_archive = scratch / "source.tar"
-        self.command("source-archive", ["git", "archive", "--format=tar", "--output", str(source_archive), SOURCE_COMMIT])
+        self.command("source-archive", ["git", "archive", "--format=tar", "--output", str(source_archive), self.profile.source_commit])
         self.receipt["source_archive_sha256"] = sha256(source_archive)
         self.command("install-rust", ["rustup", "toolchain", "install", "1.95.0", "--profile", "minimal",
                                       "--no-self-update", "--target", ",".join(TARGETS)])
@@ -533,11 +545,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--profile", choices=[profile.name for profile in PROFILES], default=HISTORICAL.name)
     args = parser.parse_args()
     builder = None
     try:
         guard_host(dict(os.environ))  # Never quarantine local developer caches.
-        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ))
+        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ), select_profile(args.profile))
         builder.run()
         return 0
     except Exception as exc:

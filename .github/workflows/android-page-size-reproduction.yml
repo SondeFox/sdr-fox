@@ -1,0 +1,65 @@
+name: Android 16 KB candidate native reconstruction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdr-fox-android16kb-2d257275-reproduction
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    if: github.repository == 'SondeFox/sdr-fox' && github.ref == 'refs/heads/master' && github.event.repository.private
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      REPRO_PRIVATE_REPOSITORY: 'true'
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - name: Check out reviewed orchestration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tools
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check out the fixed candidate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2d25727523646c166771f066634b16f60ce22977
+          path: fixed-source
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: false
+      - name: Build with fresh pinned tools and caches
+        run: >-
+          python3 tools/scripts/reproduction/build_current_pin.py
+          --profile android16kb-2d257275
+          --source-dir "$GITHUB_WORKSPACE/fixed-source"
+          --evidence-dir "$RUNNER_TEMP/sondefox-reproduction"
+      - name: Independently inspect the complete candidate set
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          unset CARGO_HOME CARGO_TARGET_DIR RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
+          export RUSTUP_HOME="$RUNNER_TEMP/sondefox-reproduction-rustup"
+          export PATH="$RUSTUP_HOME/toolchains/1.95.0-aarch64-apple-darwin/bin:$RUNNER_TEMP/sondefox-reproduction-tools/bin:$PATH"
+          python3 tools/scripts/reproduction/verify_current_pin.py \
+            --profile android16kb-2d257275 \
+            --source-dir "$GITHUB_WORKSPACE/fixed-source" \
+            --artifact-dir "$RUNNER_TEMP/sondefox-reproduction/artifacts" \
+            --ndk-dir "$ANDROID_SDK_ROOT/ndk/27.2.12479018" \
+            --build-receipt "$RUNNER_TEMP/sondefox-reproduction/build-receipt.json" \
+            --output "$RUNNER_TEMP/sondefox-reproduction/verification.json"
+      - name: Retain private success or failure evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android16kb-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sondefox-reproduction/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6

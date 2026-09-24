@@ -161,3 +161,12 @@ hardware facts. The preinstalled GPL measurement instrument is not a product
 dependency; no binary, source, header, disassembly or trace fixture is imported.
 Exact first-party measurement source, subject and aggregate hashes, factual
 references and remaining qualification limits: docs/BLOG_V4_RF_ROUTING.md.
+
+Android page-size candidate reconstruction (2026-09-24)
+------------------------------------------------------
+The separately reviewed candidate uses the existing pinned Rust/cargo-ndk/NDK
+tools with Apple Xcode 27.0/build 27A266a and the standard ARM xcode-27 hosted
+image. No SDK/toolchain is redistributed. First-party profile, layout and
+verification code remains MIT OR Apache-2.0; existing runtime component notices
+remain applicable. See docs/ANDROID_PAGE_SIZE.md. The historical fixed-pin
+reproduction tool contract and receipts are unchanged.

@@ -66,3 +66,38 @@ Run the final app in a 16 KB environment (confirm `getconf PAGE_SIZE` returns
 `16384`) and exercise native decoding, maps, receiver inputs and lifecycle.
 Hardware, signed-app, provider, rights and public-distribution gates remain
 separate. The source change neither publishes nor replaces a consumer binary.
+
+## Fixed candidate reconstruction
+
+The manual **Android 16 KB candidate native reconstruction** workflow uses
+reviewed master tooling and fixed runtime
+`2d25727523646c166771f066634b16f60ce22977`, tree
+`021353fabc37dca936cede81b4ce54808c4e5c83`. It selects the authored
+`android16kb-2d257275` profile in both the builder and independent verifier.
+Callers cannot supply a source revision, expected manifest or tool path.
+`scripts/reproduction/android-page-size-expected.json` freezes all five
+inspected local reference outputs; it is a comparison target, not evidence
+that a hosted reconstruction, consumer refresh or hardware test has passed.
+
+The candidate uses standard ARM `xcode-27` with the versioned
+`/Applications/Xcode_27.0.app` alias and requires Xcode 27.0/build 27A266a.
+The alias may resolve to Apple's release-candidate-named bundle; containment
+uses the resolved directory and acceptance requires the exact reported build.
+Rust 1.95.0, cargo-ndk 4.1.2, NDK 27.2.12479018/API 21, Mac deployment target
+14.0 and the existing remaps remain pinned. The official
+[runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+documents the image; the actual image/tool identities are retained per run.
+
+The same guarded builder creates fresh hosted tool/cache/target state,
+regenerates the header and runs the C smoke. Candidate verification adds final
+JNI linker-argument and actual LOAD/RELRO checks. Reports bind the selected
+manifest's original-byte digest and candidate identity, including failures;
+standalone verification still cannot establish freshness. The private job is
+manual, read-only, bounded to 45 minutes and retains evidence for seven days.
+There are no signing, publication or automatic vendoring steps.
+
+Omitting `--profile` preserves historical current-pin reconstruction. Its
+workflow, fb34d8c expected bytes and Xcode 26.6 contract remain unchanged.
+Historical outputs are not subjected to the new candidate layout policy.
+The lightweight guard/profile/inspection regressions run in the existing
+rustfmt CI job and require no NDK, hardware, secrets or extra runner job.
