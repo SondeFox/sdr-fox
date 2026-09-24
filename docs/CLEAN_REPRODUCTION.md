@@ -70,6 +70,57 @@ Missing or contradictory observations fail; the configured `--platform 21`
 argument alone is not accepted as effective-link evidence. No linker wrapper,
 compiler flag affecting native bytes, or arbitrary environment dump is added.
 
+## Exact provenance of prebuilt compiler object paths
+
+The Mac archive can contain upstream compiler build paths whose prefix happens
+to equal the hosted runner's HOME. The verifier distinguishes these only by
+complete object provenance. It still rejects the actual source, Cargo-home and
+isolated Rustup-home prefixes everywhere, before considering any exception.
+For Mac AR HOME matches alone, a strict archive parser requires every occurrence
+to lie inside a native member whose name, payload length, full SHA-256 and
+multiplicity match the following exact reference. Headers, symbol tables,
+modified/spoofed/extra members, malformed numeric fields or padding, and
+unaccounted occurrences fail. Android and text artifacts receive no exception.
+
+The reference is read from the validated Rust `1.95.0-aarch64-apple-darwin`
+sysroot, never from a workflow input or a build receipt. The selected rustc
+binary must match SHA-256
+`b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c`, its pinned
+version/host, and that sysroot. A missing or changed reference fails closed.
+No reference binary is vendored or added to the five output artifacts.
+
+| Immutable input | Identity |
+| --- | --- |
+| [Official Rust standard-library distribution](https://static.rust-lang.org/dist/2026-04-16/rust-std-1.95.0-aarch64-apple-darwin.tar.xz) | 27,317,176 bytes; SHA-256 `9b30089b0f767cb91b2190ffec55a9beeb2a21a1405d8da0f664d7e09d08e6d8` |
+| Sysroot `lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-da5ac53f4a183f75.rlib` | 3,291,616 bytes; SHA-256 `10c965331110c1c53556eab71fe6db80f199a71c1f746d68eafba96f4ac841cb` |
+| Rust compiler source | `59807616e1fa2540724bfbac14d7976d7e4a3860` (Rust 1.95.0) |
+
+The official distribution was checksum-verified before reading its reference
+member and license files. Its root `LICENSE-MIT`, `LICENSE-APACHE`, and
+`COPYRIGHT` have SHA-256 values respectively
+`b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1`,
+`62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`, and
+`172020dbfd5b53a226dfde77616190a48dcff519b0bc0e6deb91a8450782c4af`.
+Rust's [copyright policy at the exact source revision](https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/COPYRIGHT)
+retains component-specific exceptions to its general MIT/Apache terms.
+The pinned compiler-builtins 0.1.160
+[package declaration](https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/library/compiler-builtins/compiler-builtins/Cargo.toml)
+specifies `MIT AND Apache-2.0 WITH LLVM-exception AND (MIT OR Apache-2.0)`.
+Its [license text](https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/library/compiler-builtins/LICENSE.txt)
+has SHA-256 `ab6eec6caf0fa5775e411c7a8bc6a45c4ef2956b0980b157ab74fc5cd62a928b`.
+Retain the applicable notices and license texts when redistributing existing
+runtime portions; the LLVM exception has its own conditions and is not a
+blanket exception for redistribution of the entire reference archive.
+This classifier reads an existing toolchain input and grants no new rights or
+application distribution approval.
+
+A read-only analysis of retained run `35972312923` found all 343 HOME-prefix
+occurrences in 143 exact reference members. Its Mac artifact remains
+`fe062c4f7727cba40ff43ee09e3a8b7741e7f8f68718b56f1bf795e9b5144e6f`.
+The report counts inherited compiler paths instead of claiming there are none.
+The failed run, absent Android outputs and full cold-reconstruction gate remain
+unchanged; this analysis alone is not a successful reconstruction.
+
 ## Evidence and independent acceptance
 
 The build driver writes `build-receipt.json`, bounded command logs, a Rust

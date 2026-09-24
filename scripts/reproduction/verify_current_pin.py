@@ -29,6 +29,15 @@ CANONICAL_SOURCE_URLS = frozenset({
     "https://github.com/SondeFox/sdr-fox.git",
 })
 
+# Exact official Rust runtime input, not a textual path-prefix exemption.
+COMPILER_BUILTINS_TOOLCHAIN = "1.95.0-aarch64-apple-darwin"
+COMPILER_BUILTINS_RUSTC_VERSION = "rustc 1.95.0 (59807616e 2026-04-14)"
+COMPILER_BUILTINS_RUSTC_SHA256 = "b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c"
+COMPILER_BUILTINS_RELATIVE_PATH = "lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-da5ac53f4a183f75.rlib"
+COMPILER_BUILTINS_SHA256 = "10c965331110c1c53556eab71fe6db80f199a71c1f746d68eafba96f4ac841cb"
+COMPILER_BUILTINS_SIZE = 3291616
+AR_SYMBOL_NAMES = frozenset({"/", "__.SYMDEF", "__.SYMDEF SORTED", "__.SYMDEF_64", "__.SYMDEF_64 SORTED"})
+
 
 class VerificationError(Exception):
     """Contains a fixed code and allowlisted observations, never raw output."""
@@ -550,11 +559,117 @@ def validate_artifact_layout(root, artifacts):
     require(files == {a["path"] for a in artifacts}, "artifact-file-set-mismatch")
 
 
-def check_artifact(root, artifact, forbidden_paths):
+def strict_ar_members(data):
+    """Yield exact BSD/System-V member payloads; thin/long-name tables fail closed."""
+    require(type(data) is bytes and data.startswith(b"!<arch>\n"), "invalid-provenance-archive")
+    position, count = 8, 0
+    while position < len(data):
+        header = data[position:position + 60]
+        require(len(header) == 60 and header[58:] == b"`\n", "invalid-provenance-member-header")
+        for field in (header[16:28], header[28:34], header[34:40], header[48:58]):
+            require(re.fullmatch(rb"[0-9]+", field.strip(b" ")) is not None, "invalid-provenance-member-number")
+        require(re.fullmatch(rb"[0-7]+", header[40:48].strip(b" ")) is not None, "invalid-provenance-member-mode")
+        try:
+            size = int(header[48:58].strip())
+            name = header[:16].rstrip(b" ").decode("ascii")
+        except (ValueError, UnicodeError):
+            raise VerificationError("invalid-provenance-member-header") from None
+        require(name != "//", "unsupported-provenance-long-name-table")
+        start, end = position + 60, position + 60 + size
+        require(size >= 0 and end <= len(data), "truncated-provenance-member")
+        position = end
+        if size % 2:
+            require(position < len(data) and data[position:position + 1] == b"\n", "invalid-provenance-member-padding")
+            position += 1
+        if name.startswith("#1/"):
+            require(re.fullmatch(r"#1/[1-9][0-9]*", name) is not None, "invalid-provenance-extended-name")
+            length = int(name[3:])
+            require(length <= size, "invalid-provenance-extended-name")
+            raw_name = data[start:start + length]
+            unpadded = raw_name.rstrip(b"\0")
+            require(b"\0" not in unpadded and bool(unpadded), "invalid-provenance-extended-name")
+            try:
+                name = unpadded.decode("ascii")
+            except UnicodeError:
+                raise VerificationError("invalid-provenance-extended-name") from None
+            start += length
+        elif name not in AR_SYMBOL_NAMES and name.endswith("/"):
+            name = name[:-1]
+        require(name in AR_SYMBOL_NAMES or re.fullmatch(r"[A-Za-z0-9_.$+-]+", name) is not None,
+                "unsupported-provenance-member-name")
+        yield name, data[start:end]
+        count += 1
+    require(position == len(data) and count > 0, "empty-or-truncated-provenance-archive")
+
+
+def arm64_object(payload):
+    return len(payload) >= 32 and payload[:4] == b"\xcf\xfa\xed\xfe" and struct.unpack_from("<I", payload, 4)[0] == 16777228 and struct.unpack_from("<I", payload, 12)[0] == 1
+
+
+def load_compiler_builtins_reference():
+    selected = shutil.which("rustc")
+    require(selected is not None, "compiler-reference-rustc-missing")
+    compiler = Path(selected).resolve()
+    require(compiler.is_file() and sha256(compiler.read_bytes()) == COMPILER_BUILTINS_RUSTC_SHA256,
+            "compiler-reference-rustc-mismatch")
+    require(run([str(compiler), "--version"]).strip() == COMPILER_BUILTINS_RUSTC_VERSION,
+            "compiler-reference-toolchain-mismatch")
+    require("host: aarch64-apple-darwin" in run([str(compiler), "-vV"]).splitlines(), "compiler-reference-target-mismatch")
+    raw_root = run([str(compiler), "--print", "sysroot"]).strip()
+    require(Path(raw_root).is_absolute(), "compiler-reference-sysroot-mismatch")
+    root = Path(raw_root).resolve()
+    require(root.is_dir() and root.name == COMPILER_BUILTINS_TOOLCHAIN
+            and compiler == (root / "bin/rustc").resolve(), "compiler-reference-sysroot-mismatch")
+    if "RUSTUP_HOME" in os.environ:
+        require(root == (Path(os.environ["RUSTUP_HOME"]) / "toolchains" / COMPILER_BUILTINS_TOOLCHAIN).resolve(),
+                "compiler-reference-isolated-sysroot-mismatch")
+    reference = safe_file(root, COMPILER_BUILTINS_RELATIVE_PATH).read_bytes()
+    require(len(reference) == COMPILER_BUILTINS_SIZE and sha256(reference) == COMPILER_BUILTINS_SHA256,
+            "compiler-reference-bytes-mismatch")
+    return reference
+
+
+def classify_compiler_home_paths(data, home, reference):
+    """Classify HOME hits only through complete, pinned upstream object identity."""
+    require(type(reference) is bytes and len(reference) == COMPILER_BUILTINS_SIZE
+            and sha256(reference) == COMPILER_BUILTINS_SHA256, "compiler-reference-bytes-mismatch")
+    needle = str(home).encode()
+    require(Path(home).is_absolute() and len(needle) > 1, "invalid-home-for-provenance")
+    members = collections.Counter()
+    for name, payload in strict_ar_members(reference):
+        if name in AR_SYMBOL_NAMES or name == "lib.rmeta":
+            continue
+        require(name.endswith(".o") and arm64_object(payload), "compiler-reference-object-format-mismatch")
+        members[(name, len(payload), sha256(payload))] += 1
+    require(bool(members), "compiler-reference-objects-missing")
+    matched_hits, matched_members = 0, 0
+    used = collections.Counter()
+    for name, payload in strict_ar_members(data):
+        hits = payload.count(needle)
+        if not hits:
+            continue
+        require(name not in AR_SYMBOL_NAMES and arm64_object(payload), "host-path-outside-native-object")
+        identity = (name, len(payload), sha256(payload))
+        used[identity] += 1
+        require(used[identity] <= members[identity], "unproved-or-extra-host-path-object")
+        matched_hits += hits
+        matched_members += 1
+    # This also rejects HOME in member headers/names/padding or across boundaries.
+    require(matched_hits == data.count(needle), "host-path-outside-proved-payload")
+    return {"inherited_compiler_path_occurrences": matched_hits, "inherited_compiler_path_members": matched_members,
+            "reference_sha256": COMPILER_BUILTINS_SHA256}
+
+
+def check_artifact(root, artifact, forbidden_paths, *, home=None, compiler_reference=None):
     data = safe_file(root, artifact["path"]).read_bytes()
     observation = {"role": artifact["role"], "sha256": sha256(data), "size_bytes": len(data)}
     require(observation["sha256"] == artifact["sha256"] and len(data) == artifact["size_bytes"], "artifact-bytes-mismatch", observation)
     require(not any(str(p).encode() in data for p in forbidden_paths if len(str(p)) > 1), "host-path-in-artifact")
+    if home is not None:
+        if artifact["role"] == "macos_archive":
+            observation.update(classify_compiler_home_paths(data, home, compiler_reference))
+        else:
+            require(str(home).encode() not in data, "host-path-in-artifact")
     return observation
 
 
@@ -602,7 +717,7 @@ def parse_macho_archive(data):
         require(len(header) == 60 and header[58:] == b"`\n", "invalid-archive-member")
         try:
             size = int(header[48:58].strip())
-            name = header[:16].rstrip().decode("ascii")
+            name = header[:16].rstrip(b" ").decode("ascii")
         except (ValueError, UnicodeError):
             raise VerificationError("invalid-archive-member") from None
         require(size >= 0 and position + 60 + size <= len(data), "truncated-archive-member")
@@ -696,11 +811,18 @@ def verify(source, artifact_root, ndk, expected, build_receipt=None):
         return report.result(expected)
     report.check("package-graphs", lambda: verify_packages(source, cargo_home, expected["package_graphs"]))
     report.check("artifact-layout", lambda: validate_artifact_layout(artifact_root, expected["artifacts"]))
-    forbidden = [source, home, cargo_home]
+    reference = report.check("compiler-builtins-reference", load_compiler_builtins_reference)
+    if reference is not None:
+        report.checks[-1]["observation"] = {"toolchain": COMPILER_BUILTINS_TOOLCHAIN,
+                                          "target": "aarch64-apple-darwin", "sha256": COMPILER_BUILTINS_SHA256,
+                                          "rustc_sha256": COMPILER_BUILTINS_RUSTC_SHA256,
+                                          "reference_path": COMPILER_BUILTINS_RELATIVE_PATH,
+                                          "size_bytes": COMPILER_BUILTINS_SIZE}
+    forbidden = [source, cargo_home]
     if "RUSTUP_HOME" in os.environ:
         forbidden.append(Path(os.environ["RUSTUP_HOME"]).resolve())
     for artifact in expected["artifacts"]:
-        report.check(artifact["role"] + "-bytes", lambda a=artifact: check_artifact(artifact_root, a, forbidden))
+        report.check(artifact["role"] + "-bytes", lambda a=artifact: check_artifact(artifact_root, a, forbidden, home=home, compiler_reference=reference))
     def binding_checks():
         for a in expected["artifacts"]:
             if a["role"] in ("c_header", "kotlin_binding"):

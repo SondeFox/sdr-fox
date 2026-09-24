@@ -56,3 +56,8 @@ It never imports the restricted repository, changes the source pin, or grants
 publication approval. The GitHub-hosted image's actual version and toolchain
 file inventory accompany the evidence; a moving image label alone is not a
 reproducibility assertion.
+
+The same technical inventory records the exact official Rust 1.95.0 Apple ARM64
+compiler-builtins archive used to classify inherited compiler paths by whole
+object identity. Its component license expression is preserved separately from
+Rust's general license summary; no archive is vendored by the verifier.
