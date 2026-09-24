@@ -44,6 +44,9 @@ generated radio captures/images, and private analysis folders.
   stream semantics.
 - CI actions are pinned to immutable full commit SHAs and the workflow token is
   read-only.
+- Normal CI fixes Rust at 1.95.0, matching the current-pin reproduction
+  toolchain. The declared Rust 1.86 minimum remains unverified by these gates;
+  compiler baseline updates require review.
 
 ## Public-release gate
 
