@@ -18,6 +18,8 @@
 
 use sdr_fox_core::{GainMode, GainRequest, GainStep, Tuner, TunerBus, TunerError, TunerKind};
 
+use super::blog_v4::RfPlan;
+
 /// R82xx IF frequency (3.57 MHz) — the standard value used by osmocom.
 pub const R82XX_IF_HZ: u32 = 3_570_000;
 /// Default reference clock for R820T/T2 dongles.
@@ -409,6 +411,7 @@ fn set_mux(
     shadow: &mut ShadowRegs,
     lo_hz: u64,
     xtal_cap_sel: XtalCapSel,
+    board_open_drain: Option<u8>,
 ) -> Result<(), TunerError> {
     // `lo_hz` and `lo_mhz` are the same quantity in different units, so the
     // similar-names lint is silenced here.
@@ -422,7 +425,12 @@ fn set_mux(
     let range = &FREQ_RANGES[idx];
 
     // Open Drain (R23[3]).
-    shadow.write_reg_mask(bus, 0x17, range.open_drain, 0x08)?;
+    shadow.write_reg_mask(
+        bus,
+        0x17,
+        board_open_drain.unwrap_or(range.open_drain),
+        0x08,
+    )?;
     // RF_MUX, Polymux (R26[7:6] + R26[1:0]).
     shadow.write_reg_mask(bus, 0x1a, range.rf_mux_poly, 0xc3)?;
     // TF BAND (R27[7:0]) — full byte write, like osmocom r82xx_write_reg.
@@ -583,6 +591,7 @@ fn mask_reg8(byte: u8, val: u8, mask: u8) -> u8 {
 /// R82xx unified driver covering R820T, R820T2, and R828D.
 pub struct R82xx {
     kind: TunerKind,
+    blog_v4: bool,
     xtal_hz: u32,
     /// Xtal capacitor selector used during mux setup. osmocom `r82xx_init`
     /// hard-codes [`XtalCapSel::High0p`]; a future xtal-check routine may
@@ -611,12 +620,24 @@ impl R82xx {
         };
         Self {
             kind,
+            blog_v4: false,
             xtal_hz,
             xtal_cap_sel: XtalCapSel::High0p,
             shadow: ShadowRegs::from_init_array(),
             last_freq_hz: 0,
             if_hz: R82XX_IF_HZ,
         }
+    }
+
+    /// RTL-SDR Blog V4 uses a shared 28.8 MHz oscillator for its R828D
+    /// tuner and RTL2832U (manufacturer's published 2023 design description).
+    /// Ordinary R828D receivers retain the 16 MHz default in `new`.
+    #[must_use]
+    pub fn for_blog_v4() -> Self {
+        let mut tuner = Self::new(TunerKind::R828D);
+        tuner.xtal_hz = R82XX_XTAL_R820T_HZ;
+        tuner.blog_v4 = true;
+        tuner
     }
 
     /// The reference clock this instance was constructed with, in Hz.
@@ -708,11 +729,26 @@ impl Tuner for R82xx {
     }
 
     fn set_freq(&mut self, bus: &mut dyn TunerBus, hz: u64) -> Result<(), TunerError> {
-        // PLL synthesizes LO = RF + IF.
-        let lo_hz = hz
+        let board_plan = self.blog_v4.then(|| RfPlan::for_sma_frequency(hz));
+        let tuner_rf_hz = board_plan.map_or(hz, |plan| plan.tuner_rf_hz);
+        // Board input/notch selection uses SMA RF. Only the ordinary tuner
+        // tracking lookup and PLL use translated tuner RF + the current IF.
+        let lo_hz = tuner_rf_hz
             .checked_add(u64::from(self.if_hz))
             .ok_or(TunerError::PllNotLocked { freq_hz: hz })?;
-        set_mux(bus, &mut self.shadow, lo_hz, self.xtal_cap_sel)?;
+        if let Some(plan) = board_plan {
+            self.shadow
+                .write_reg_mask(bus, 0x05, plan.input_r05, 0x60)?;
+            self.shadow
+                .write_reg_mask(bus, 0x06, plan.input_r06, 0x08)?;
+        }
+        set_mux(
+            bus,
+            &mut self.shadow,
+            lo_hz,
+            self.xtal_cap_sel,
+            board_plan.map(|plan| plan.notch_r17),
+        )?;
         set_pll(bus, &mut self.shadow, lo_hz, self.xtal_hz, self.kind)?;
         self.last_freq_hz = hz;
         Ok(())
@@ -884,6 +920,142 @@ mod tests {
         shadow.write_reg_mask(&mut bus, 0x1d, 0x03, 0x03).unwrap();
         assert_eq!(bus.attempts, vec![(0x1d, vec![expected]); 2]);
         assert_eq!(shadow.get(0x1d), expected);
+    }
+
+    #[test]
+    fn blog_v4_uses_shared_28m8_reference_without_changing_generic_r828d() {
+        assert_eq!(R82xx::for_blog_v4().xtal_hz(), 28_800_000);
+        assert_eq!(R82xx::new(TunerKind::R828D).xtal_hz(), 16_000_000);
+    }
+
+    #[test]
+    fn blog_v4_routes_and_notches_follow_measured_sma_boundaries() {
+        // Independently authored expectations from the measured USB contract.
+        // Exactly 28.8 MHz is the documented coherent-boundary decision.
+        let cases = [
+            (500_000, 0x20, 0x08, 0x00),
+            (2_200_000, 0x20, 0x08, 0x00),
+            (2_200_001, 0x20, 0x08, 0x08),
+            (28_799_999, 0x20, 0x08, 0x08),
+            (28_800_000, 0x60, 0x00, 0x08),
+            (28_800_001, 0x60, 0x00, 0x08),
+            (84_999_999, 0x60, 0x00, 0x08),
+            (85_000_000, 0x60, 0x00, 0x00),
+            (85_000_001, 0x60, 0x00, 0x00),
+            (112_000_000, 0x60, 0x00, 0x00),
+            (112_000_001, 0x60, 0x00, 0x08),
+            (171_999_999, 0x60, 0x00, 0x08),
+            (172_000_000, 0x60, 0x00, 0x00),
+            (172_000_001, 0x60, 0x00, 0x00),
+            (242_000_000, 0x60, 0x00, 0x00),
+            (242_000_001, 0x60, 0x00, 0x08),
+            (249_999_999, 0x60, 0x00, 0x08),
+            (250_000_000, 0x00, 0x00, 0x08),
+            (250_000_001, 0x00, 0x00, 0x08),
+            (401_500_000, 0x00, 0x00, 0x08),
+            (1_766_000_000, 0x00, 0x00, 0x08),
+        ];
+        let mut tuner = R82xx::for_blog_v4();
+        let mut bus = MockBus::new();
+        tuner.init(&mut bus).unwrap();
+        // Check both directions, including repeated cross-band writes against
+        // the current shadow rather than only fresh power-on state.
+        for &(hz, r05, r06, r17) in cases.iter().chain(cases.iter().rev()) {
+            tuner.set_freq(&mut bus, hz).unwrap();
+            assert_eq!(tuner.shadow.get(0x05) & 0x60, r05, "RF {hz}");
+            assert_eq!(tuner.shadow.get(0x06) & 0x08, r06, "RF {hz}");
+            assert_eq!(tuner.shadow.get(0x17) & 0x08, r17, "RF {hz}");
+            assert_eq!(tuner.last_freq_hz(), hz);
+        }
+    }
+
+    #[test]
+    fn blog_v4_hf_translation_precedes_current_if_and_tracking_lookup() {
+        for (hz, bandwidth, expected_lo, expected_tracking) in [
+            (500_000, 2_400_000, 31_115_000, 0xdf),
+            (10_000_000, 250_000, 40_925_000, 0xdf),
+            (28_799_999, 2_400_000, 59_414_999, 0x8b),
+            (28_800_000, 2_400_000, 30_615_000, 0xdf),
+            (48_184_999, 2_400_000, 49_999_999, 0xdf),
+            (48_185_000, 2_400_000, 50_000_000, 0xbe),
+            (48_200_000, 2_400_000, 50_015_000, 0xbe),
+            (21_199_999, 2_400_000, 51_814_999, 0xbe),
+            (401_500_000, 250_000, 403_625_000, 0x00),
+        ] {
+            let mut tuner = R82xx::for_blog_v4();
+            let mut bus = ScriptedReadBus::new(vec![]);
+            tuner.set_bandwidth(&mut bus, bandwidth).unwrap();
+            let error = tuner.set_freq(&mut bus, hz).unwrap_err();
+            assert!(
+                matches!(error, TunerError::PllNotLocked { freq_hz } if freq_hz == expected_lo)
+            );
+            assert_eq!(tuner.shadow.get(0x1b), expected_tracking, "RF {hz}");
+            assert_eq!(tuner.last_freq_hz(), 0, "failed PLL must not publish RF");
+        }
+    }
+
+    #[test]
+    fn blog_v4_route_preserves_gain_and_unrelated_masked_fields() {
+        let mut tuner = R82xx::for_blog_v4();
+        let mut bus = MockBus::new();
+        tuner.init(&mut bus).unwrap();
+        for hz in [500_000, 100_000_000, 401_500_000, 10_000_000] {
+            tuner.set_gain(&mut bus, GainRequest::Overall(280)).unwrap();
+            let gain = tuner.shadow.get(0x05) & !0x60;
+            let r06 = tuner.shadow.get(0x06) & !0x08;
+            let r17 = tuner.shadow.get(0x17) & !0x08;
+            tuner.set_freq(&mut bus, hz).unwrap();
+            assert_eq!(tuner.shadow.get(0x05) & !0x60, gain);
+            assert_eq!(tuner.shadow.get(0x06) & !0x08, r06);
+            assert_eq!(tuner.shadow.get(0x17) & !0x08, r17);
+            let route = tuner.shadow.get(0x05) & 0x60;
+            for mode in [GainMode::Auto, GainMode::Manual] {
+                tuner.set_gain_mode(&mut bus, mode).unwrap();
+                assert_eq!(tuner.shadow.get(0x05) & 0x60, route);
+            }
+            tuner.set_bandwidth(&mut bus, 250_000).unwrap();
+            tuner.set_freq(&mut bus, hz).unwrap();
+            assert_eq!(tuner.shadow.get(0x05) & 0x60, route);
+        }
+    }
+
+    #[test]
+    fn blog_v4_init_and_failed_route_retry_restore_the_requested_fields() {
+        let mut tuner = R82xx::for_blog_v4();
+        let mut bus = MockBus::new();
+        tuner.init(&mut bus).unwrap();
+        tuner.set_freq(&mut bus, 401_500_000).unwrap();
+        let before = tuner.shadow.get(0x05);
+        let mut failing = FailOnceBus {
+            attempts: vec![],
+            fail_next: true,
+        };
+        assert!(tuner.set_freq(&mut failing, 500_000).is_err());
+        assert_eq!(tuner.shadow.get(0x05), before);
+        assert_eq!(tuner.last_freq_hz(), 401_500_000);
+        tuner.set_freq(&mut bus, 500_000).unwrap();
+        assert_eq!(tuner.shadow.get(0x05) & 0x60, 0x20);
+        tuner.init(&mut bus).unwrap();
+        tuner.set_freq(&mut bus, 500_000).unwrap();
+        assert_eq!(tuner.shadow.get(0x05) & 0x60, 0x20);
+        assert_eq!(tuner.shadow.get(0x06) & 0x08, 0x08);
+        assert_eq!(tuner.shadow.get(0x17) & 0x08, 0x00);
+    }
+
+    #[test]
+    fn generic_tuners_keep_their_route_bits_and_do_not_translate_hf() {
+        for kind in [TunerKind::R820T, TunerKind::R820T2, TunerKind::R828D] {
+            let mut tuner = R82xx::new(kind);
+            let mut bus = MockBus::new();
+            tuner.init(&mut bus).unwrap();
+            let r05 = tuner.shadow.get(0x05);
+            let r06 = tuner.shadow.get(0x06);
+            tuner.set_freq(&mut bus, 401_500_000).unwrap();
+            assert_eq!(tuner.shadow.get(0x05), r05);
+            assert_eq!(tuner.shadow.get(0x06), r06);
+            assert_eq!(tuner.shadow.get(0x17) & 0x08, 0x00);
+            assert!(tuner.set_freq(&mut bus, 500_000).is_err());
+        }
     }
 
     #[test]
@@ -1166,6 +1338,22 @@ mod tests {
         let mut tuner = R82xx::new(TunerKind::R820T2);
         tuner.set_bandwidth(&mut bus, 250_000).unwrap();
         assert_eq!(tuner.if_hz(), 2_125_000);
+    }
+
+    #[test]
+    fn narrowband_pll_failure_reports_local_oscillator_not_requested_rf() {
+        let mut bus = ScriptedReadBus::new(vec![]);
+        let mut tuner = R82xx::for_blog_v4();
+        tuner.set_bandwidth(&mut bus, 250_000).unwrap();
+        // Empty scripted reads never assert the PLL lock bit. This independently
+        // reproduces the reported RF/LO relation without requiring RF input.
+        let error = tuner.set_freq(&mut bus, 401_500_000).unwrap_err();
+        assert!(matches!(
+            error,
+            TunerError::PllNotLocked {
+                freq_hz: 403_625_000
+            }
+        ));
     }
 
     #[test]

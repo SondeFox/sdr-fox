@@ -9,21 +9,28 @@ This directory holds the Kotlin API (`SdrFox.kt`), the USB-permission helper
 The `.so` is built with `cargo-ndk` for `arm64-v8a` and `x86_64`:
 
 ```sh
-rustup target add aarch64-linux-android x86_64-linux-android
-cargo install cargo-ndk
-export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.2.12479018  # or your NDK
+rustup target add --toolchain 1.95.0 aarch64-linux-android x86_64-linux-android
+cargo +1.95.0 install cargo-ndk --version 4.1.2 --locked
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.2.12479018
 export SDR_FOX_SOURCE_ROOT="$(pwd -P)"
 export CARGO_CACHE_ROOT="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=${SDR_FOX_SOURCE_ROOT}=/workspace/sdr-fox \
 --remap-path-prefix=${CARGO_CACHE_ROOT}=/cargo \
 --remap-path-prefix=${HOME}=/home/builder"
-cargo ndk -t arm64-v8a -t x86_64 build --release -p sdr-fox-jni --features android
+cargo +1.95.0 ndk --platform 21 -t arm64-v8a -t x86_64 build --locked --release -p sdr-fox-jni --features android
 ```
 
 This produces `target/<triple>/release/libsdr_fox_jni.so` for each ABI.
 The remapping flags keep developer-specific source, Cargo-cache, and home paths
 out of panic metadata in the distributed libraries. Treat those flags as part
 of the reproducible Android build contract, not as optional local cleanup.
+
+Use cargo-ndk 4.1.2 and NDK 27.2.12479018 for the reviewed build. The package's
+Android-only `build.rs` also supplies 16 KB maximum/common page-size flags to
+the JNI cdylib link; do not replace these with a host-wide linker override.
+Inspect both actual libraries' LOAD and GNU_RELRO layout and the final APK;
+see [the page-size contract](../../docs/ANDROID_PAGE_SIZE.md). Local build
+success alone does not establish device compatibility or release approval.
 
 ### How Android opens a USB device
 
@@ -44,7 +51,7 @@ and the bounded-queue drop policy mean the same thing on both. See
 
 `rusb` and `libusb1-sys` are excluded from the Android target by Cargo target
 tables in `crates/sdr-fox-transport/Cargo.toml`, so the Android `.so` links
-**no libusb code**. libusb remains the desktop macOS default; desktop binary
+**no libusb code**. macOS also uses nusb; Linux/Windows fallback binary
 distribution notes are documented in §4 of the repository `NOTICE`.
 
 Verify this before shipping an APK. `[profile.release]` sets `strip = "symbols"`
@@ -58,11 +65,11 @@ SO=target/aarch64-linux-android/release/libsdr_fox_jni.so
 strings -a $SO | grep -c -i libusb        # must be 0
 strings -a $SO | grep -F -c "$HOME"        # must be 0
 $NDK/llvm-readelf -d $SO | grep NEEDED    # liblog/libdl/libm/libc
-$NDK/llvm-nm -D --defined-only $SO | grep -c Java_com_sdrfox_SdrFox_native  # 17
+$NDK/llvm-nm -D --defined-only $SO | grep -c Java_com_sdrfox_SdrFox_native  # 18
 ```
 
 On the current build those report 0, the four Android system libraries above,
-and 17 respectively.
+and 18 respectively.
 
 ## Gradle integration
 
@@ -95,7 +102,8 @@ SdrUsbPermission.request(context, usbManager, device) { granted ->
     val (connection, fd) = usbManager.openSdr(device) ?: return@request
     try {
         val kind = SdrUsbIds.matches(device) ?: return@request
-        SdrFox.open(fd, kind, device.productName)?.use { sdr ->
+        SdrFox.openUsbDevice(fd, kind, device.vendorId, device.productId,
+            device.manufacturerName, device.productName)?.use { sdr ->
             sdr.frequency = 100_000_000L
             sdr.setSampleRate(2_048_000)
             sdr.biasTee = true
@@ -116,9 +124,13 @@ SdrUsbPermission.request(context, usbManager, device) { granted ->
 }
 ```
 
-Pass `UsbDevice.productName` so Airspy Mini is not silently configured as an
-R2. For a ROM that omits product strings, call `SdrFox.open` with
-`Kind.AIRSPY_MINI` explicitly.
+Pass the actual IDs and manufacturer/product names from that same authorized
+`UsbDevice`. Complete identity lets the existing strict Blog V4 detector choose
+its 28.8 MHz tuner clock; generic R828D remains at 16 MHz. Missing descriptors
+do not imply V4. The original `SdrFox.open(fd, kind, productName)` API and native
+entry point remain compatible but cannot identify V4. For Airspy Mini on a ROM
+that omits product strings, select `Kind.AIRSPY_MINI` explicitly. No serial is
+needed. See [the identity regression record](../../docs/ANDROID_USB_IDENTITY.md).
 
 ### Hold the `UsbDeviceConnection` open
 

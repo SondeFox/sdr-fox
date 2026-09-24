@@ -51,6 +51,34 @@ pub struct NusbTransport {
 }
 
 impl NusbTransport {
+    /// Start the ordinary stream with an opt-in diagnostic observer before
+    /// bounded delivery. The callback sees each successful USB payload's
+    /// actual length, including payloads subsequently dropped by the queue.
+    /// It must be brief and nonblocking; it runs on the USB worker. Ordinary
+    /// application streams do not install or execute this observer.
+    ///
+    /// # Errors
+    /// Returns the same configuration, ownership, and USB errors as streaming.
+    pub fn start_bulk_stream_observed(
+        &mut self,
+        endpoint: u8,
+        buffer_count: usize,
+        buffer_size: usize,
+        queue_depth: usize,
+        observe: impl FnMut(usize) + Send + 'static,
+    ) -> Result<crate::stream::Stream, SdrError> {
+        validate_stream_config(buffer_count, buffer_size, queue_depth)?;
+        let lease = StreamLease::acquire(&self.stream_busy)?;
+        let source =
+            NusbBufferSource::new(self.iface.clone(), endpoint, buffer_size, buffer_count)?
+                .with_stream_lease(lease);
+        Ok(crate::stream::start_stream_concrete(
+            ObservedSource { source, observe },
+            queue_depth,
+            None,
+        ))
+    }
+
     /// Wrap an already-opened, claimed `nusb` interface.
     #[must_use]
     pub fn from_interface(iface: Interface) -> Self {
@@ -84,6 +112,12 @@ impl NusbTransport {
             ))
         })?;
         drop(info_iter);
+        Self::open_info(&info)
+    }
+
+    /// Open the exact enumerated native object, never a replacement index.
+    #[cfg(not(target_os = "android"))]
+    pub fn open_info(info: &nusb::DeviceInfo) -> Result<Self, SdrError> {
         let device = info
             .open()
             .wait()
@@ -114,6 +148,29 @@ impl NusbTransport {
             DeviceRecipient::Endpoint => Recipient::Endpoint,
             DeviceRecipient::Other => Recipient::Other,
         }
+    }
+}
+
+struct ObservedSource<F> {
+    source: NusbBufferSource,
+    observe: F,
+}
+
+impl<F: FnMut(usize) + Send + 'static> BufferSource for ObservedSource<F> {
+    fn next_buffer(&mut self) -> Result<Vec<u8>, SdrError> {
+        let result = self.source.next_buffer();
+        if let Ok(bytes) = &result {
+            (self.observe)(bytes.len());
+        }
+        result
+    }
+
+    fn set_stop(&mut self, stop: Arc<AtomicBool>) {
+        self.source.set_stop(stop);
+    }
+
+    fn suppress_error_accounting(&mut self) -> bool {
+        self.source.suppress_error_accounting()
     }
 }
 
@@ -769,6 +826,103 @@ mod tests {
             Err(SdrError::Cancelled)
         ));
         assert_eq!(endpoint.events, [RecoveryEvent::Cancel]);
+    }
+
+    #[test]
+    fn diagnostic_rings_reap_every_pending_transfer_or_preserve_pending_ownership() {
+        for pending in [0, 4, 16, 32] {
+            for complete_reaps in [false, true] {
+                let mut endpoint = FakeStalledEndpoint {
+                    pending,
+                    cancelled: false,
+                    complete_reaps,
+                    events: Vec::new(),
+                };
+                let result = reap_stalled_endpoint(
+                    &mut endpoint,
+                    Instant::now() + Duration::from_secs(2),
+                    || false,
+                );
+                assert_eq!(endpoint.events[0], RecoveryEvent::Cancel);
+                if complete_reaps || pending == 0 {
+                    assert!(result.is_ok());
+                    assert_eq!(endpoint.pending, 0);
+                    assert_eq!(endpoint.events.len(), pending + 1);
+                } else {
+                    assert!(matches!(result, Err(SdrError::Timeout)));
+                    assert_eq!(endpoint.pending, pending);
+                    assert_eq!(endpoint.events.len(), MAX_STALL_REAP_TIMEOUTS + 1);
+                }
+            }
+            let mut endpoint = FakeStalledEndpoint {
+                pending,
+                cancelled: false,
+                complete_reaps: true,
+                events: Vec::new(),
+            };
+            let mut stop_checks = 0;
+            let result = reap_stalled_endpoint(
+                &mut endpoint,
+                Instant::now() + Duration::from_secs(2),
+                || {
+                    stop_checks += 1;
+                    stop_checks > 2
+                },
+            );
+            if pending == 0 {
+                assert!(result.is_ok());
+            } else {
+                assert!(matches!(result, Err(SdrError::Cancelled)));
+                assert_eq!(endpoint.pending, pending - 2);
+                assert_eq!(
+                    endpoint.events,
+                    [
+                        RecoveryEvent::Cancel,
+                        RecoveryEvent::Reap,
+                        RecoveryEvent::Reap
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stopped_clear_keeps_the_original_stream_lease_until_late_completion() {
+        let busy = Arc::new(AtomicBool::new(false));
+        let lease = StreamLease::acquire(&busy).unwrap();
+        let (send, receive) = mpsc::channel();
+        let mut operation = OwnedOperation::new();
+        operation.install(receive);
+        assert!(matches!(
+            operation.poll_until(Instant::now(), CLEAR_HALT_POLL, || false),
+            OperationPoll::TimedOut
+        ));
+        assert!(matches!(
+            operation.poll_until(Instant::now(), CLEAR_HALT_POLL, || true),
+            OperationPoll::Stopped
+        ));
+        assert!(operation.is_running());
+        assert!(matches!(
+            StreamLease::acquire(&busy),
+            Err(SdrError::DeviceBusy)
+        ));
+        // A channel models the retained worker returning its exact ownership
+        // anchor after the native call, including completion after a stop.
+        send.send(lease).unwrap();
+        let OperationPoll::Complete(returned) = operation.poll_until(
+            Instant::now() + Duration::from_secs(2),
+            CLEAR_HALT_POLL,
+            || false,
+        ) else {
+            panic!("original clear completion must return ownership")
+        };
+        assert!(!operation.is_running());
+        assert!(matches!(
+            StreamLease::acquire(&busy),
+            Err(SdrError::DeviceBusy)
+        ));
+        drop(returned);
+        assert!(StreamLease::acquire(&busy).is_ok());
     }
 
     #[test]

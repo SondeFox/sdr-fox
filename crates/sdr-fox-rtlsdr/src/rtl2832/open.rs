@@ -182,11 +182,25 @@ pub fn open_device(
     configure_demod_for_tuner(transport.as_mut(), tuner_kind)?;
 
     // Build the tuner instance and initialize it.
-    let mut tuner_obj = super::tuner_factory(tuner_kind)?;
+    let blog_v4 = tuner_kind == TunerKind::R828D && is_blog_v4(desc);
+    let mut tuner_obj: Box<dyn Tuner> = if blog_v4 {
+        Box::new(crate::tuners::r82xx::R82xx::for_blog_v4())
+    } else {
+        super::tuner_factory(tuner_kind)?
+    };
     init_tuner(transport.as_mut(), tuner_obj.as_mut())?;
 
     let info = make_info(desc, Some(tuner_kind));
-    Ok(RtlSdr::new(info, transport, tuner_obj))
+    Ok(RtlSdr::new(info, transport, tuner_obj).with_blog_v4_routing(blog_v4))
+}
+
+// Manufacturer-documented EEPROM identity. A missing/edited string must
+// never change the clock of an unrelated generic R828D receiver.
+// Facts: https://www.rtl-sdr.com/v4/ and the manufacturer's 2023 V4 design.
+fn is_blog_v4(desc: &DeviceDescriptor) -> bool {
+    (desc.vendor_id, desc.product_id) == (0x0bda, 0x2838)
+        && desc.vendor_name.as_deref() == Some("RTLSDRBlog")
+        && desc.product_name.as_deref() == Some("Blog V4")
 }
 
 /// Probe the tuner by reading each candidate's chip-id register, in the
@@ -289,6 +303,30 @@ mod tests {
     /// Whether a recorded request went through the I2C tunnel (any direction).
     fn is_iic(r: &RecordedRequest) -> bool {
         r.index >> 8 == Block::Iic as u16
+    }
+
+    #[test]
+    fn blog_v4_clock_selection_requires_all_manufacturer_identity_fields() {
+        let mut desc = DeviceDescriptor {
+            vendor_id: 0x0bda,
+            product_id: 0x2838,
+            vendor_name: Some("RTLSDRBlog".into()),
+            product_name: Some("Blog V4".into()),
+            serial: None,
+            index: 0,
+            kind: sdr_fox_core::DeviceKind::RtlSdr,
+        };
+        assert!(is_blog_v4(&desc));
+        desc.vendor_name = None;
+        assert!(!is_blog_v4(&desc));
+        desc.vendor_name = Some("Other".into());
+        assert!(!is_blog_v4(&desc));
+        desc.vendor_name = Some("RTLSDRBlog".into());
+        desc.product_name = Some("Blog V3".into());
+        assert!(!is_blog_v4(&desc));
+        desc.product_name = Some("Blog V4".into());
+        desc.product_id = 0x2832;
+        assert!(!is_blog_v4(&desc));
     }
 
     #[test]

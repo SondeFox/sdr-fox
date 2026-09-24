@@ -38,7 +38,7 @@ sdr-fox-airspy = { path = "crates/sdr-fox-airspy", version = "0.1.0" }
 sdr-fox-dsp = { path = "crates/sdr-fox-dsp", version = "0.1.0" }
 
 # External — USB
-nusb = "0.2"
+nusb = "=0.2.7"
 rusb = "0.9"
 
 # External — async / channels / errors / logging

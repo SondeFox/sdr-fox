@@ -338,8 +338,6 @@ pub unsafe extern "system" fn Java_com_sdrfox_SdrFox_nativeOpenByFd(
         let product_name_str = read_optional_java_string(&mut env, &product_name)?
             .filter(|name| !name.trim().is_empty())
             .or(explicit_product_name);
-        let transport: Box<dyn Transport> =
-            open_fd_transport(fd, kind).map_err(|e| e.to_string())?;
         let desc = DeviceDescriptor {
             vendor_id: if matches!(kind, DeviceKind::Airspy) {
                 0x1d50
@@ -357,26 +355,93 @@ pub unsafe extern "system" fn Java_com_sdrfox_SdrFox_nativeOpenByFd(
             index: 0,
             kind,
         };
-        let backend: Box<dyn SdrBackend> = match kind {
-            DeviceKind::Airspy => Box::new(AirspyBackend),
-            _ => Box::new(RtlSdrBackend),
-        };
-        let dev = backend.open(&desc, transport).map_err(|e| e.to_string())?;
-        let handle = box_handle(dev);
-        if handle == 0 {
-            Err("native device handle registry exhausted".to_owned())
-        } else {
-            Ok(handle)
-        }
+        open_fd_device(fd, &desc)
     }));
+    finish_open(&mut env, result)
+}
+
+/// Open with metadata from the same permission-authorized Android USB device.
+/// The old entry point remains available for clients that have only an fd.
+///
+/// # Safety
+/// `env` must be valid and both string arguments must be valid JNI strings or null.
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_sdrfox_SdrFox_nativeOpenByFdWithIdentity(
+    mut env: JNIEnv,
+    _this: JObject<'_>,
+    fd: jint,
+    backend_kind: jint,
+    vendor_id: jint,
+    product_id: jint,
+    manufacturer_name: JString<'_>,
+    product_name: JString<'_>,
+) -> jlong {
+    init_android_logging();
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<jlong, String> {
+        if fd < 0 {
+            return Err(format!("invalid USB file descriptor: {fd}"));
+        }
+        let manufacturer = read_optional_java_string(&mut env, &manufacturer_name)?;
+        let product = read_optional_java_string(&mut env, &product_name)?;
+        let desc = descriptor_from_usb_identity(
+            backend_kind,
+            vendor_id,
+            product_id,
+            manufacturer,
+            product,
+        )?;
+        open_fd_device(fd, &desc)
+    }));
+    finish_open(&mut env, result)
+}
+
+fn descriptor_from_usb_identity(
+    backend_kind: jint,
+    vendor_id: jint,
+    product_id: jint,
+    manufacturer: Option<String>,
+    product: Option<String>,
+) -> Result<DeviceDescriptor, String> {
+    let (kind, explicit_product) = decode_backend_kind(backend_kind)?;
+    Ok(DeviceDescriptor {
+        vendor_id: u16::try_from(vendor_id).map_err(|_| "invalid USB vendor ID".to_owned())?,
+        product_id: u16::try_from(product_id).map_err(|_| "invalid USB product ID".to_owned())?,
+        // Preserve exact spelling: the board-specific V4 predicate deliberately
+        // requires both published strings and actual VID/PID. No serial needed.
+        vendor_name: manufacturer.filter(|name| !name.trim().is_empty()),
+        product_name: product
+            .filter(|name| !name.trim().is_empty())
+            .or(explicit_product),
+        serial: None,
+        index: 0,
+        kind,
+    })
+}
+
+fn open_fd_device(fd: jint, desc: &DeviceDescriptor) -> Result<jlong, String> {
+    let transport = open_fd_transport(fd, desc.kind).map_err(|e| e.to_string())?;
+    let backend: Box<dyn SdrBackend> = match desc.kind {
+        DeviceKind::Airspy => Box::new(AirspyBackend),
+        _ => Box::new(RtlSdrBackend),
+    };
+    let dev = backend.open(desc, transport).map_err(|e| e.to_string())?;
+    let handle = box_handle(dev);
+    if handle == 0 {
+        Err("native device handle registry exhausted".to_owned())
+    } else {
+        Ok(handle)
+    }
+}
+
+fn finish_open(env: &mut JNIEnv<'_>, result: std::thread::Result<Result<jlong, String>>) -> jlong {
     match result {
         Ok(Ok(handle)) => handle,
         Ok(Err(message)) => {
-            throw_runtime_exception(&mut env, &message);
+            throw_runtime_exception(env, &message);
             0
         }
         Err(_) => {
-            throw_runtime_exception(&mut env, "panic while opening SDR device");
+            throw_runtime_exception(env, "panic while opening SDR device");
             0
         }
     }
@@ -1426,6 +1491,53 @@ mod tests {
         assert!(matches!(kind, DeviceKind::Airspy));
         assert_eq!(product.as_deref(), Some("Airspy Mini"));
         assert!(decode_backend_kind(99).is_err());
+    }
+
+    #[test]
+    fn android_usb_identity_preserves_blog_v4_board_metadata_without_a_serial() {
+        let desc = descriptor_from_usb_identity(
+            0,
+            0x0bda,
+            0x2838,
+            Some("RTLSDRBlog".into()),
+            Some("Blog V4".into()),
+        )
+        .unwrap();
+        assert_eq!((desc.vendor_id, desc.product_id), (0x0bda, 0x2838));
+        assert_eq!(desc.vendor_name.as_deref(), Some("RTLSDRBlog"));
+        assert_eq!(desc.product_name.as_deref(), Some("Blog V4"));
+        assert_eq!(desc.kind, DeviceKind::RtlSdr);
+        assert_eq!(desc.serial, None);
+    }
+
+    #[test]
+    fn android_usb_identity_never_invents_or_normalizes_v4_identity() {
+        let absent = descriptor_from_usb_identity(0, 0x0bda, 0x2832, None, None).unwrap();
+        assert_eq!(absent.product_id, 0x2832);
+        assert_eq!(absent.vendor_name, None);
+        assert_eq!(absent.product_name, None);
+        let edited = descriptor_from_usb_identity(
+            0,
+            0x0bda,
+            0x2838,
+            Some(" RTLSDRBlog".into()),
+            Some("Blog V4 ".into()),
+        )
+        .unwrap();
+        assert_eq!(edited.vendor_name.as_deref(), Some(" RTLSDRBlog"));
+        assert_eq!(edited.product_name.as_deref(), Some("Blog V4 "));
+        let mini = descriptor_from_usb_identity(2, 0x1d50, 0x60a1, None, None).unwrap();
+        assert_eq!(mini.kind, DeviceKind::Airspy);
+        assert_eq!(mini.product_name.as_deref(), Some("Airspy Mini"));
+    }
+
+    #[test]
+    fn android_usb_identity_rejects_out_of_range_ids_and_unknown_kinds() {
+        for invalid in [-1, 65_536, i32::MAX] {
+            assert!(descriptor_from_usb_identity(0, invalid, 0x2838, None, None).is_err());
+            assert!(descriptor_from_usb_identity(0, 0x0bda, invalid, None, None).is_err());
+        }
+        assert!(descriptor_from_usb_identity(99, 0x0bda, 0x2838, None, None).is_err());
     }
 
     #[test]

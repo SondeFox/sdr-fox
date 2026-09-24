@@ -127,3 +127,37 @@ docs/CLEAN_REPRODUCTION.md#exact-provenance-of-prebuilt-compiler-object-paths.
 Its pinned source declares MIT AND Apache-2.0 WITH LLVM-exception AND
 (MIT OR Apache-2.0); retain its applicable component terms. No reference binary
 is vendored or newly distributed by this verifier change.
+
+macOS USB update (2026-09-06): macOS and Android exclude rusb/libusb entirely;
+historical desktop libusb notices apply only to Linux/Windows fallback.
+Published nusb 0.2.7 remains unmodified (Apache-2.0 OR MIT). RTL-SDR Blog V4
+clock selection uses manufacturer-published board oscillator and EEPROM
+identity facts only; no GPL implementation was consulted. See docs/MACOS_USB.md.
+
+First-party Airspy performance additions (September 2026)
+------------------------------------------------------
+The safe FIR/routing changes, synthetic CF32 comparison harness and opt-in
+macOS transfer probe were authored in this clean repository against canonical
+c927ba987f2b9e1da7a50f1d9debca92d9207447. They retain the repository's
+MIT OR Apache-2.0 license choices. See docs/MACOS_AIRSPY_KERNEL_CPU.md and
+docs/MACOS_AIRSPY_TRANSFER_CPU.md for exact original source revisions, reference
+copy terms and bounded evidence. No new external code/dependency is added;
+existing third-party acknowledgements and redistribution obligations remain.
+
+First-party packed statistics and resilience additions (2026-09-08)
+----------------------------------------------------------------
+Safe packed ADC extraction, exact raw statistics fusion, fixed diagnostic
+payload profiles and synthetic tests extend reviewed c89f580 source. They are
+first-party MIT OR Apache-2.0 work, with no external implementation or new
+dependency. The selected macOS Airspy policy is 256 KiB and 4/4/1 MiB payload;
+its bounded results do not guarantee hardware losslessness or a CPU target.
+See docs/MACOS_AIRSPY_PACKED_STATS_CPU.md and docs/MACOS_AIRSPY_RESILIENCE.md;
+preserve existing license texts, notices and redistribution obligations.
+sdr-fox Blog V4 RF routing (2026-09-09)
+-------------------------------------
+New V4-only routing code and synthetic tests are independently authored under
+MIT OR Apache-2.0 from reviewed functional USB observations and manufacturer
+hardware facts. The preinstalled GPL measurement instrument is not a product
+dependency; no binary, source, header, disassembly or trace fixture is imported.
+Exact first-party measurement source, subject and aggregate hashes, factual
+references and remaining qualification limits: docs/BLOG_V4_RF_ROUTING.md.

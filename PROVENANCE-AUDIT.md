@@ -85,3 +85,55 @@ one checksum-pinned official Rust compiler-builtins archive from the validated
 `docs/CLEAN_REPRODUCTION.md`. This explains inherited compiler build paths; it
 does not relax project-path rejection or establish general redistribution
 clearance, and no reference binary is copied into Git.
+
+## 2026-09-06 macOS integration
+
+The C API extensions and Mac transport selection are independently written
+against canonical clean source. Final macOS uses unmodified nusb 0.2.7 with
+rusb/libusb target-excluded. A candidate vendor workaround was removed after
+physical comparison failed to reproduce the historic async OUT fault.
+
+The Blog V4 tuner clock correction uses the manufacturer's published design
+and device identification instructions, linked in docs/MACOS_USB.md. No GPL
+source implementation or quarantined legacy source was consulted for it.
+Generic R828D behavior remains at the prior 16 MHz reference. Physical tests
+established that the V4 changed from PLL failure to IQ streaming at UHF; RF
+sensitivity and complete V4 switched-filter/HF support are not established.
+
+## 2026-09-08 packed statistics and resilience integration
+
+First-party safe Rust packed ADC routing/statistics and fixed macOS Airspy
+payload profiles extend the reviewed c89f580 baseline. Frozen worker sources
+7e50fdd33fa7cbf23add05b96835e5281746aabd and
+c1d3a88ea844572fb59e302193b12289e8fc1690 were independently reviewed before
+separate integration. The selected 4/4/1 MiB policy preserves 256 KiB transfers
+and the bridge; no rate, dependency, nusb, public ABI or QoS change is included.
+The packed kernel retains exact DC/filter/output order and per-call statistics.
+
+New source, synthetic tests and diagnostic harnesses are independently authored
+under this repository's MIT OR Apache-2.0 terms. No legacy/GPL/research source,
+external implementation, private capture or copied graph machinery was used.
+Historical and c89 reference copies retain their original licenses and stay in
+ignored verification output. Exact worker origins, measured artifacts, recovery
+incidents and limits are in MACOS_AIRSPY_PACKED_STATS_CPU.md and
+MACOS_AIRSPY_RESILIENCE.md. Atomic consumer outputs require one frozen reviewed
+combined revision; no publication or whole-app CPU acceptance is implied.
+## 2026-09-09 independently measured V4 RF routing
+
+V4 input selection, internal HF translation, the route-related GPIO 5 level and
+R17 notch fields are implemented from independently reviewed USB observations.
+No GPL source or disassembly, quarantined repository or research implementation
+input was used. No dependency or binary is added. Exact source/instrument/report
+identities and the deliberate exact-28.8-MHz boundary decision are recorded in
+`docs/BLOG_V4_RF_ROUTING.md`; physical RF and final consumer acceptance remain
+separate gates.
+
+## 2026-09-24 Android page-size build policy
+
+The JNI package build script, target-selection regression and technical
+documentation are independently authored under MIT OR Apache-2.0. Tests compile
+and execute that first-party script with synthetic Cargo target metadata; no
+third-party fixture, native artifact or radio capture is added. Google Android
+and Cargo documentation supply linker/interface facts only, as linked in
+`docs/ANDROID_PAGE_SIZE.md`. Immutable versions are the containing Git commits
+and blobs. No dependency or source-license change is introduced.
