@@ -62,13 +62,15 @@ def run(argv, cwd=None, *, timeout=180):
 
 def git(source, *args, allow_empty=False, strip_output=True):
     argv = ["git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", str(source), *args]
-    if allow_empty:
+    if allow_empty or not strip_output:
         try:
-            result = subprocess.run(argv, capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired):
+            # Decode bytes ourselves so universal-newline conversion cannot
+            # turn a configured trailing CR into the command's sole LF.
+            result = subprocess.run(argv, capture_output=True, timeout=30)
+            output = result.stdout.decode("utf-8")
+        except (OSError, subprocess.TimeoutExpired, UnicodeError):
             raise VerificationError("source-command-unavailable") from None
         require(result.returncode == 0, "source-command-failed")
-        output = result.stdout
     else:
         output = run(argv)
     return output.strip() if strip_output else output
@@ -117,10 +119,10 @@ def check_source(source, expected):
     require(git(source, "rev-list", "--max-parents=0", "HEAD").splitlines() == [expected["verified_fresh_history_root"]], "source-root-mismatch")
     require(git(source, "remote").splitlines() == ["origin"], "unexpected-source-remote")
     for args in (("remote", "get-url", "--all", "origin"), ("remote", "get-url", "--push", "--all", "origin")):
-        # Only the two exact canonical spellings are equivalent. Preserve URL
-        # whitespace so malformed remotes cannot pass through generic stripping.
-        urls = git(source, *args, strip_output=False).splitlines()
-        require(len(urls) == 1 and urls[0] in CANONICAL_SOURCE_URLS, "noncanonical-source-url")
+        # Require one exact canonical URL and Git's single LF terminator.
+        # Neither whitespace stripping nor splitlines() may erase URL bytes.
+        output = git(source, *args, strip_output=False)
+        require(output in {url + "\n" for url in CANONICAL_SOURCE_URLS}, "noncanonical-source-url")
     require(not git(source, "status", "--porcelain", "--untracked-files=no", allow_empty=True), "modified-source")
     # Hidden modifications must not be omitted by assume-unchanged/skip-worktree.
     tracked = git(source, "ls-files", "-v").splitlines()

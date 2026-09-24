@@ -527,6 +527,17 @@ class VerifierTests(unittest.TestCase):
         expected = {"commit": commit, "tree": command("rev-parse", "HEAD^{tree}"), "verified_fresh_history_root": commit, "repository": "https://github.com/SondeFox/sdr-fox.git", "cargo_lock_sha256": v.sha256((source / "Cargo.lock").read_bytes())}
         return source, expected, command
 
+    def set_quoted_source_url(self, source, command, key, value):
+        # Git's config writer leaves a lone CR unquoted, then its reader trims
+        # it. Quote fixture values explicitly to exercise the actual URL bytes.
+        marker = "synthetic-remote-url-placeholder"
+        command("config", "--replace-all", key, marker)
+        config = source / ".git/config"
+        raw = config.read_bytes()
+        self.assertEqual(raw.count(marker.encode()), 1)
+        quoted = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+        config.write_bytes(raw.replace(marker.encode(), ('"' + quoted + '"').encode()))
+
     def test_real_git_source_identity_and_mutation(self):
         source, expected, _ = self.make_source()
         self.assertEqual(v.check_source(source, expected)["commit"], expected["commit"])
@@ -568,6 +579,9 @@ class VerifierTests(unittest.TestCase):
             "git@github.com:SondeFox/sdr-fox.git",
             " " + canonical, canonical + " ", "\t" + canonical, canonical + "\t",
             "\n" + canonical, canonical + "\n",
+            "\r" + canonical, canonical + "\r", canonical + "\r\n",
+            canonical + "\v", canonical + "\f", canonical + "\x1c", canonical + "\x1d",
+            canonical + "\x1e", canonical + "\x85", canonical + "\u2028", canonical + "\u2029",
         )
         for location, url in itertools.product(("manifest", "fetch", "push"), rejected):
             with self.subTest(location=location, url=url):
@@ -579,9 +593,17 @@ class VerifierTests(unittest.TestCase):
                     code = "noncanonical-source-repository"
                 else:
                     key = "remote.origin.url" if location == "fetch" else "remote.origin.pushurl"
-                    command("config", "--replace-all", key, url)
+                    self.set_quoted_source_url(source, command, key, url)
                     code = "noncanonical-source-url"
                 self.fails(code, lambda: v.check_source(source, checked))
+
+    def test_remote_url_stdout_preserves_carriage_return_before_validation(self):
+        source, expected, command = self.make_source()
+        canonical = "https://github.com/SondeFox/sdr-fox.git"
+        self.set_quoted_source_url(source, command, "remote.origin.url", canonical + "\r")
+        self.assertEqual(v.git(source, "remote", "get-url", "--all", "origin", strip_output=False),
+                         canonical + "\r\n")
+        self.fails("noncanonical-source-url", lambda: v.check_source(source, expected))
 
     def test_additional_canonical_fetch_or_push_urls_are_rejected(self):
         source, expected, command = self.make_source()
