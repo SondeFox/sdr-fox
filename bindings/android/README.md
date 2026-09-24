@@ -9,9 +9,9 @@ This directory holds the Kotlin API (`SdrFox.kt`), the USB-permission helper
 The `.so` is built with `cargo-ndk` for `arm64-v8a` and `x86_64`:
 
 ```sh
-rustup target add aarch64-linux-android x86_64-linux-android
-cargo install cargo-ndk
-export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.2.12479018  # or your NDK
+rustup target add --toolchain 1.95.0 aarch64-linux-android x86_64-linux-android
+cargo +1.95.0 install cargo-ndk --version 4.1.2 --locked
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.2.12479018
 export SDR_FOX_SOURCE_ROOT="$(pwd -P)"
 export CARGO_CACHE_ROOT="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=${SDR_FOX_SOURCE_ROOT}=/workspace/sdr-fox \
