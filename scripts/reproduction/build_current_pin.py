@@ -14,10 +14,12 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 SOURCE_COMMIT = "fb34d8c600725b54c5a950234c892a593c343968"
@@ -38,6 +40,16 @@ CARGO_NDK_CRATE = "903cc87cda6ab7a2ff82a74065e1c2ae5baa869546b32eb4aacabcc6ed5a6
 TARGETS = ("aarch64-apple-darwin", "aarch64-linux-android", "x86_64-linux-android")
 BUILD_SECONDS = 38 * 60  # Leave time for independent verification and upload.
 LOG_LIMIT = 16 * 1024 * 1024
+SMOKE_SOURCE = '''#include "sdr_fox.h"
+#include <stdio.h>
+#include <string.h>
+int main(void) {
+    const char *version = sdrfox_version();
+    if (version == NULL || strcmp(version, "0.1.0") != 0) return 1;
+    return puts(version) < 0 ? 2 : 0;
+}
+'''
+ANDROID_PROBE_SOURCE = "int main(void) { return 0; }\n"
 
 
 class BuildError(RuntimeError):
@@ -123,6 +135,113 @@ def build_regenerating_header(header: Path, compile_source) -> None:
             "Header was not regenerated exactly")
 
 
+def validate_darwin(observed):
+    require(observed["system"] == "Darwin" and observed["machine"] == "arm64", "Unexpected observed Darwin host")
+    require(re.fullmatch(r"\d+\.\d+\.\d+", observed["release"]) is not None, "Missing Darwin release")
+    require(observed["version"].startswith("Darwin Kernel Version " + observed["release"] + ":"), "Contradictory Darwin identity")
+
+
+def validate_apple_version(tool, version):
+    if tool == "clang":
+        require(version.startswith("Apple clang version "), "Missing Apple clang identity")
+    else:
+        require("llvm-nm" in version and "Apple LLVM version " in version, "Missing Apple nm identity")
+
+
+def option_values(argv, name):
+    values = []
+    for i, token in enumerate(argv):
+        if token == name:
+            require(i + 1 < len(argv), "Missing compiler option value")
+            values.append(argv[i + 1])
+        elif token.startswith(name + "="):
+            values.append(token[len(name) + 1:])
+    return values
+
+
+def parse_android_build(log, clang, linker, rustc):
+    """Read cargo-ndk's actual generated target environment and Cargo rustc argv."""
+    sections = {}
+    current = None
+    for line in log.splitlines():
+        marker = re.fullmatch(r"\s*Building (arm64-v8a|x86_64) \(([^)]+)\)\s*", line)
+        if marker:
+            abi, target = marker.groups()
+            require(target not in sections, "Repeated Android build section")
+            current = {"abi": abi, "assignments": {}, "rustc_commands": []}
+            sections[target] = current
+            continue
+        if current is None:
+            continue
+        exported = re.fullmatch(r"\s*Exporting ([A-Za-z0-9_-]+)=(.+)\s*", line)
+        if exported:
+            key, raw = exported.groups()
+            if key in {"ANDROID_PLATFORM", "ANDROID_ABI", "_CARGO_NDK_LINK_CLANG", "_CARGO_NDK_LINK_TARGET"} or key.startswith("CARGO_TARGET_") and key.endswith("_LINKER"):
+                value = json.loads(raw) if raw.startswith('"') else raw.strip()
+                current["assignments"].setdefault(key, []).append(str(value))
+        running = re.fullmatch(r"\s*Running `(.*)`\s*", line)
+        if running:
+            tokens = shlex.split(running.group(1))
+            for index, token in enumerate(tokens):
+                if Path(token).is_absolute() and Path(token).name == "rustc":
+                    argv = tokens[index:]
+                    if option_values(argv, "--crate-name") == ["sdr_fox_jni"]:
+                        current["rustc_commands"].append(argv)
+                    break
+    require(set(sections) == set(TARGETS[1:]), "Missing Android target diagnostics")
+    result = []
+    for target, abi in ((TARGETS[1], "arm64-v8a"), (TARGETS[2], "x86_64")):
+        section = sections[target]
+        require(section["abi"] == abi, "Contradictory Android ABI")
+        expected = {"ANDROID_PLATFORM": "21", "ANDROID_ABI": abi,
+                    "_CARGO_NDK_LINK_CLANG": str(clang), "_CARGO_NDK_LINK_TARGET": "--target=" + target + "21",
+                    "CARGO_TARGET_" + target.upper().replace("-", "_") + "_LINKER": str(linker)}
+        for key, value in expected.items():
+            require(section["assignments"].get(key) == [value], "Missing or contradictory Android linker/API assignment: " + key)
+        require(set(section["assignments"]) == set(expected), "Unexpected Android linker assignment")
+        require(len(section["rustc_commands"]) == 1, "Missing or repeated JNI compiler invocation")
+        argv = section["rustc_commands"][0]
+        require(argv[0] == str(rustc) and option_values(argv, "--target") == [target], "Unexpected effective rustc/target")
+        crate_types = {item for value in option_values(argv, "--crate-type") for item in value.split(",")}
+        require("cdylib" in crate_types, "JNI command does not produce a shared library")
+        codegen = []
+        for i, token in enumerate(argv):
+            if token == "-C":
+                require(i + 1 < len(argv), "Missing codegen option")
+                codegen.append(argv[i + 1])
+            elif token.startswith("-C"):
+                codegen.append(token[2:])
+        require([x for x in codegen if x.startswith("linker=")] == ["linker=" + str(linker)], "Contradictory rustc linker")
+        result.append({"rust_target": target, "abi": abi, "api_level": 21,
+                       "clang_target": expected["_CARGO_NDK_LINK_TARGET"], "clang_path": str(clang),
+                       "linker_path": str(linker), "rustc_argv": argv, "wrapper_assignments": expected})
+    return result
+
+
+def parse_android_clang(log, target, ndk):
+    """Require cc1 and linker selections actually printed by pinned clang -###."""
+    commands = [shlex.split(line.strip()) for line in log.splitlines() if line.lstrip().startswith('"')]
+    frontends = [argv for argv in commands if "-cc1" in argv]
+    linkers = [argv for argv in commands if argv and Path(argv[0]).name in {"ld", "ld.lld"}]
+    require(len(frontends) == 1 and len(linkers) == 1, "Missing effective clang compiler/linker diagnostics")
+    triples = option_values(frontends[0], "-triple")
+    expected_triple = target.replace("-linux-", "-unknown-linux-") + "21"
+    require(triples == [expected_triple], "Contradictory effective Android API triple")
+    require(re.findall(r"^Target: (.+)$", log, re.M) == [expected_triple], "Missing or contradictory clang target identity")
+    tools = ndk / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
+    require(Path(frontends[0][0]).resolve() == (tools / "clang").resolve(), "Unexpected effective NDK compiler")
+    require(Path(linkers[0][0]).resolve() == (tools / "ld.lld").resolve(), "Unexpected effective NDK linker")
+    library = (ndk / "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib" / target / "21").resolve()
+    require("-shared" in linkers[0], "Android probe did not resolve a shared-library link")
+    crt = [str(library / "crtbegin_so.o"), str(library / "crtend_so.o")]
+    observed_crt = [str(Path(arg).resolve()) for arg in linkers[0] if Path(arg).name.startswith(("crtbegin", "crtend"))]
+    require(observed_crt == crt, "Missing or contradictory Android API startup objects")
+    api_paths = [str(Path(arg[2:]).resolve()) for arg in linkers[0] if arg.startswith("-L") and re.search(r"/sysroot/usr/lib/[^/]+/\d+$", arg[2:])]
+    require(api_paths == [str(library)], "Missing or contradictory Android API library directory")
+    return {"cc1_triple": triples[0], "api_level": 21, "platform_library_path": str(library),
+            "crt_objects": crt, "linker_argv": linkers[0]}
+
+
 class Builder:
     def __init__(self, source: Path, evidence: Path, env: dict[str, str]):
         self.source, self.evidence = source, evidence
@@ -137,6 +256,28 @@ class Builder:
         self.env = {key: env[key] for key in ("HOME", "PATH", "TMPDIR", "DEVELOPER_DIR", "ANDROID_SDK_ROOT") if key in env}
         self.env.update({"LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8", "CARGO_TERM_COLOR": "never"})
         self.log_number = 0
+        self.roles = {"$SOURCE": str(source)}
+        for key in ("HOME", "RUNNER_TEMP", "DEVELOPER_DIR", "ANDROID_SDK_ROOT"):
+            if env.get(key):
+                self.roles["$" + key] = str(Path(env[key]).resolve())
+        self.roles["$TMPDIR"] = env.get("TMPDIR", tempfile.gettempdir()).rstrip("/")
+
+    def sanitized(self, value):
+        if isinstance(value, list):
+            return [self.sanitized(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self.sanitized(item) for key, item in value.items()}
+        if isinstance(value, str):
+            replacements = {(role, actual) for role, actual in self.roles.items()}
+            replacements.update((role, str(Path(actual).resolve())) for role, actual in self.roles.items())
+            for role, actual in sorted(replacements, key=lambda item: (-len(item[1]), item[0])):
+                value = value.replace(actual, role)
+        return value
+
+    def log_reference(self, label):
+        records = [item for item in self.receipt["commands"] if item["label"] == label]
+        require(len(records) == 1 and records[0]["status"] == "pass", "Missing successful command evidence: " + label)
+        return {"path": records[0]["log"], "sha256": records[0]["log_sha256"]}
 
     def save_receipt(self) -> None:
         (self.evidence / "build-receipt.json").write_text(json.dumps(self.receipt, indent=2, sort_keys=True) + "\n")
@@ -146,7 +287,7 @@ class Builder:
         require(remaining > 0, "Cold-build time budget exhausted")
         self.log_number += 1
         log = self.evidence / "logs" / f"{self.log_number:02d}-{label}.log"
-        record = {"label": label, "argv": argv, "log": str(log.relative_to(self.evidence)), "status": "running"}
+        record = {"label": label, "argv": self.sanitized(argv), "log": str(log.relative_to(self.evidence)), "status": "running"}
         self.receipt["commands"].append(record)
         self.save_receipt()
         print(f"Reproduction: {label}", flush=True)
@@ -181,6 +322,77 @@ class Builder:
         self.receipt["artifacts"].append({"path": str(output.relative_to(self.evidence)),
                                           "size_bytes": output.stat().st_size, "sha256": sha256(output)})
 
+    def observe_apple_tools(self):
+        darwin = {}
+        logs = {}
+        for key, flag in (("system", "-s"), ("release", "-r"), ("version", "-v"), ("machine", "-m")):
+            label = "darwin-" + key
+            darwin[key] = self.command(label, ["uname", flag], query=True).strip()
+            logs[key] = self.log_reference(label)
+        validate_darwin(darwin)
+        observed = {"darwin": darwin | {"logs": logs}}
+        tools = {}
+        for tool in ("clang", "nm"):
+            prefix = "apple-" + tool
+            path = Path(self.command(prefix + "-path", ["xcrun", "--find", tool], query=True).strip())
+            require(path.is_absolute() and path.is_file(), "Missing selected Apple tool")
+            version = self.command(prefix + "-version", [str(path), "--version"], query=True).strip()
+            validate_apple_version(tool, version)
+            observed["apple_" + tool] = {"path_role": prefix, "path": str(path), "sha256": sha256(path),
+                "version": version, "path_log": self.log_reference(prefix + "-path"),
+                "version_log": self.log_reference(prefix + "-version")}
+            tools[tool] = path
+        self.receipt["observed_tools"] = self.sanitized(observed)
+        self.save_receipt()
+        return tools
+
+    def c_link_smoke(self, archive, header, scratch, clang):
+        source = scratch / "sdr-version-smoke.c"
+        executable = scratch / "sdr-version-smoke"
+        source.write_text(SMOKE_SOURCE)
+        self.roles["$SCRATCH"] = str(scratch.resolve())
+        record = {"status": "running", "expected_version": "0.1.0",
+                  "source_path": self.sanitized(str(source)), "source_sha256": sha256(source),
+                  "header_sha256": sha256(header), "archive_sha256": sha256(archive),
+                  "executable_path": self.sanitized(str(executable))}
+        self.receipt["c_link_smoke"] = record
+        self.save_receipt()
+        try:
+            sdk = Path(self.command("apple-sdk-path", ["xcrun", "--sdk", "macosx", "--show-sdk-path"], query=True).strip())
+            require(sdk.is_absolute() and sdk.is_dir(), "Missing observed macOS SDK for C smoke")
+            record.update(sdk_path=self.sanitized(str(sdk)), sdk_path_log=self.log_reference("apple-sdk-path"))
+            self.command("macos-c-link-smoke", [str(clang), "-std=c11", "-Wall", "-Wextra", "-Werror",
+                "-arch", "arm64", "-mmacosx-version-min=14.0", "-isysroot", str(sdk), "-I", str(header.parent), str(source), str(archive),
+                "-framework", "IOKit", "-framework", "CoreFoundation", "-liconv", "-lSystem", "-o", str(executable)])
+            record.update(link_exit_code=0, link_log=self.log_reference("macos-c-link-smoke"), executable_sha256=sha256(executable))
+            output = self.command("macos-c-run-smoke", [str(executable)], query=True)
+            run_log = self.log_reference("macos-c-run-smoke")
+            raw_output = (self.evidence / run_log["path"]).read_bytes()
+            record.update(run_exit_code=0, run_log=run_log, stdout_sha256=hashlib.sha256(raw_output).hexdigest())
+            require(raw_output == b"0.1.0\n" and output == "0.1.0\n", "C link/run smoke returned an unexpected version")
+            record.update(status="pass", version="0.1.0")
+        except Exception:
+            record["status"] = "failed"
+            raise
+        finally:
+            self.save_receipt()
+
+    def observe_android_commands(self, build_log, ndk, tool_root, rust_bin, scratch):
+        clang = ndk / "toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+        observations = parse_android_build(build_log, clang, tool_root / "bin/cargo-ndk", rust_bin / "rustc")
+        source = scratch / "android-driver.c"
+        source.write_text(ANDROID_PROBE_SOURCE)
+        for row in observations:
+            target = row["rust_target"]
+            label = "android-clang-" + target
+            output = self.command(label, [row["clang_path"], row["clang_target"], "-###", "-shared", "-fPIC", "-x", "c",
+                                         str(source), "-o", str(scratch / ("android-driver-" + row["abi"]))], query=True)
+            row["build_log"] = self.log_reference("build-android")
+            row["clang_driver"] = parse_android_clang(output, target, ndk) | {
+                "log": self.log_reference(label), "probe_source_sha256": sha256(source)}
+        self.receipt["android_effective_commands"] = self.sanitized(observations)
+        self.save_receipt()
+
     def run(self) -> None:
         env = self.original_env
         guard_host(env)
@@ -196,6 +408,7 @@ class Builder:
         scratch.mkdir(exist_ok=False)
         rustup_home = runner_temp / "sondefox-reproduction-rustup"
         tool_root = runner_temp / "sondefox-reproduction-tools"
+        self.roles.update({"$SCRATCH": str(scratch), "$RUSTUP_HOME": str(rustup_home), "$TOOL_ROOT": str(tool_root)})
         require(not rustup_home.exists() and not tool_root.exists(), "Pinned tool directories must be new")
         self.receipt["cold_boundary"] = {"reused_actions_cache": False, "reused_target": False,
                                         "quarantined_default_cargo_entries": quarantine_cargo_cache(home, scratch / "unused-warm-cargo"),
@@ -206,6 +419,7 @@ class Builder:
                             ("rustup", ["rustup", "--version"]),
                             ("python", [sys.executable, "--version"])):
             self.command(label, args)
+        apple_tools = self.observe_apple_tools()
         self.receipt["bootstrap_executables"] = {
             tool: sha256(Path(shutil.which(tool, path=self.env["PATH"])))
             for tool in ("rustup", "python3")
@@ -233,6 +447,7 @@ class Builder:
         self.receipt["cargo_ndk_executable_sha256"] = sha256(tool_root / "bin" / "cargo-ndk")
         sdk = Path(self.env["ANDROID_SDK_ROOT"]).resolve()
         ndk = sdk / "ndk" / NDK_REVISION
+        self.roles["$NDK_HOME"] = str(ndk)
         require(not ndk.exists(), "Expected NDK must be newly installed on this runner")
         sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
         self.receipt["bootstrap_executables"]["sdkmanager"] = sha256(sdkmanager)
@@ -244,7 +459,7 @@ class Builder:
         require(re.search(r"^Pkg.Revision\s*=\s*(\S+)\s*$", properties, re.M).group(1) == NDK_REVISION, "NDK revision mismatch")
         self.env["ANDROID_NDK_HOME"] = str(ndk)
         self.env["RUSTFLAGS"] = remap_flags(self.source, home)
-        self.receipt["build_environment"] = {"RUSTFLAGS": self.env["RUSTFLAGS"], "CARGO_HOME": "unset; default HOME/.cargo",
+        self.receipt["build_environment"] = {"RUSTFLAGS": self.sanitized(self.env["RUSTFLAGS"]), "CARGO_HOME": "unset; default HOME/.cargo",
                                              "ANDROID_NDK_REVISION": NDK_REVISION, "ANDROID_API": 21, "MACOSX_DEPLOYMENT_TARGET": "14.0"}
         # A fresh default registry is separate from cargo-ndk's bootstrap registry.
         require(not (home / ".cargo" / "registry").exists() and not (home / ".cargo" / "git").exists(), "Default production Cargo cache was populated before fetch")
@@ -275,7 +490,9 @@ class Builder:
         self.copy_artifact(self.source / "target" / TARGETS[0] / "release" / "libsdr_fox.a", "libsdr_fox_ffi.a")
         self.copy_artifact(header, "sdr_fox.h")
         self.copy_artifact(self.source / "bindings" / "android" / "SdrFox.kt", "SdrFox.kt")
-        self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"])
+        self.c_link_smoke(self.evidence / "artifacts/libsdr_fox_ffi.a", self.evidence / "artifacts/sdr_fox.h", scratch, apple_tools["clang"])
+        android_log = self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], query=True)
+        self.observe_android_commands(android_log, ndk, tool_root, rust_bin, scratch)
         for abi, target in (("arm64-v8a", TARGETS[1]), ("x86_64", TARGETS[2])):
             self.copy_artifact(self.source / "target" / target / "release" / "libsdr_fox_jni.so", abi + "/libsdr_fox_jni.so")
         require(not self.command("final-source-cleanliness", ["git", "status", "--porcelain", "--untracked-files=no"], query=True).strip(), "Tracked source changed during build")

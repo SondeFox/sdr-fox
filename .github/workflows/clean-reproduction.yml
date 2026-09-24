@@ -50,6 +50,7 @@ jobs:
             --source-dir "$GITHUB_WORKSPACE/fixed-source" \
             --artifact-dir "$RUNNER_TEMP/sondefox-reproduction/artifacts" \
             --ndk-dir "$ANDROID_SDK_ROOT/ndk/27.2.12479018" \
+            --build-receipt "$RUNNER_TEMP/sondefox-reproduction/build-receipt.json" \
             --output "$RUNNER_TEMP/sondefox-reproduction/verification.json"
       - name: Retain private success or failure evidence
         if: ${{ !cancelled() }}

@@ -49,6 +49,15 @@ bytes. The driver removes the disposable source's generated header before the
 Mac build and requires exact regeneration; cbindgen's fallback to an existing
 header cannot masquerade as successful generation.
 
+The build also records actual Darwin and selected Apple clang/nm identities,
+executable hashes and bounded tool output. Android `-vv` diagnostics bind each
+JNI rustc invocation to cargo-ndk's observed linker, clang target and API-level
+assignments. A pinned-clang `-###` check independently resolves those observed
+arguments to API-21 cc1 triples, startup objects and system library directories.
+Missing or contradictory observations fail; the configured `--platform 21`
+argument alone is not accepted as effective-link evidence. No linker wrapper,
+compiler flag affecting native bytes, or arbitrary environment dump is added.
+
 ## Evidence and independent acceptance
 
 The build driver writes `build-receipt.json`, bounded command logs, a Rust
@@ -63,6 +72,19 @@ source/lock identities, complete target package sets, declarations and actual
 native exports, architectures, dynamic dependencies, and tool constraints. It
 does not trust a build-produced assertion of success. A partial or mismatched
 set fails. An ABI match never converts a byte mismatch into reproduction.
+
+A first-party C smoke program must link the produced archive/generated header
+with IOKit, CoreFoundation, iconv and libSystem, then call only `sdrfox_version()`
+and print exactly `0.1.0`. Link failure, run failure, or a wrong result fails the
+proof. Its source/executable and output hashes, exit codes, input hashes and
+command-log references are bound in the build receipt. The temporary executable
+stays outside the five-artifact directory and remains available to the separate
+verifier during the job; it is never an application release or hardware test.
+First-party C source for this smoke and the Android dry-run probe is generated
+from the reviewed driver; no third-party implementation or fixture is copied.
+Structured command paths use stable role names; raw command observations remain
+only in the bounded private logs. The independent verifier receives the explicit
+build receipt and checks these observations as well as the five binary subjects.
 
 The private artifact is retained for seven days, including failure evidence
 where available. A hard cancellation/runner loss can prevent upload. No Cargo
