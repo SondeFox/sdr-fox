@@ -24,8 +24,9 @@ application cutover, that private repository is retained as
 `SondeFox/SondeFox-private-archive-20260924`; its stable
 [repository ID lookup](https://api.github.com/repositories/1334845456)
 identifies the archive independently of its name. The replacement application
-repository ID `1384652189` has fresh history and does not inherit the original
-measurement's source identity or acceptance claims.
+repository ID `1384652189` retains cleaned application history. The original
+measurement remains attributed to its recorded repository, commit and tree;
+the replacement alone establishes no new native acceptance.
 
 After normal review and merge into private canonical master, an authorized
 maintainer can manually run **Current-pin clean native reproduction** from

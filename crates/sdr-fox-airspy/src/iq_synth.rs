@@ -701,12 +701,8 @@ impl IqSynthesizer {
 
     /// Reset all streaming state (mixer phase + FIR history). Used by tests.
     pub fn reset(&mut self) {
-        for h in &mut self.poly_carry {
-            *h = 0.0;
-        }
-        for h in &mut self.delay_carry {
-            *h = 0.0;
-        }
+        self.poly_carry.fill(0.0);
+        self.delay_carry.fill(0.0);
         self.mixer_phase = 0;
         self.dc_average = 0.0;
         self.pending_low_byte = None;
