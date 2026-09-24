@@ -116,3 +116,12 @@ The existing strict V4 clock predicate is unchanged; generic R828D retains
 16 MHz. Existing fd-open callers keep their ABI and behavior. No dependency,
 C ABI or radio-register change is included. See
 [the implementation and provenance record](ANDROID_USB_IDENTITY.md).
+
+## Android page-size integration (2026-09-24)
+
+The maintained branch integrates the canonical shipped fb34d8c runtime with
+master's separate historical reproduction tooling. Android JNI now has
+package-local 16 KB LOAD/RELRO linker policy, with no dependency or JNI API
+change. See [the page-size contract](ANDROID_PAGE_SIZE.md) for target selection,
+tests and the remaining atomic consumer/fresh-build/device gates. Historical
+fixed-pin reproduction still builds fb34d8c and is not new-candidate evidence.

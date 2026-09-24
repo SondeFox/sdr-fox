@@ -17,13 +17,20 @@ export CARGO_CACHE_ROOT="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=${SDR_FOX_SOURCE_ROOT}=/workspace/sdr-fox \
 --remap-path-prefix=${CARGO_CACHE_ROOT}=/cargo \
 --remap-path-prefix=${HOME}=/home/builder"
-cargo ndk -t arm64-v8a -t x86_64 build --release -p sdr-fox-jni --features android
+cargo +1.95.0 ndk --platform 21 -t arm64-v8a -t x86_64 build --locked --release -p sdr-fox-jni --features android
 ```
 
 This produces `target/<triple>/release/libsdr_fox_jni.so` for each ABI.
 The remapping flags keep developer-specific source, Cargo-cache, and home paths
 out of panic metadata in the distributed libraries. Treat those flags as part
 of the reproducible Android build contract, not as optional local cleanup.
+
+Use cargo-ndk 4.1.2 and NDK 27.2.12479018 for the reviewed build. The package's
+Android-only `build.rs` also supplies 16 KB maximum/common page-size flags to
+the JNI cdylib link; do not replace these with a host-wide linker override.
+Inspect both actual libraries' LOAD and GNU_RELRO layout and the final APK;
+see [the page-size contract](../../docs/ANDROID_PAGE_SIZE.md). Local build
+success alone does not establish device compatibility or release approval.
 
 ### How Android opens a USB device
 

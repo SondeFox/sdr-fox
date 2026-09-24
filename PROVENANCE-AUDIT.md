@@ -127,3 +127,13 @@ input was used. No dependency or binary is added. Exact source/instrument/report
 identities and the deliberate exact-28.8-MHz boundary decision are recorded in
 `docs/BLOG_V4_RF_ROUTING.md`; physical RF and final consumer acceptance remain
 separate gates.
+
+## 2026-09-24 Android page-size build policy
+
+The JNI package build script, target-selection regression and technical
+documentation are independently authored under MIT OR Apache-2.0. Tests compile
+and execute that first-party script with synthetic Cargo target metadata; no
+third-party fixture, native artifact or radio capture is added. Google Android
+and Cargo documentation supply linker/interface facts only, as linked in
+`docs/ANDROID_PAGE_SIZE.md`. Immutable versions are the containing Git commits
+and blobs. No dependency or source-license change is introduced.

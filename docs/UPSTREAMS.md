@@ -132,3 +132,11 @@ upstream. The existing GPL binary was a black-box measurement instrument only;
 none of its source, headers or disassembly was read or imported. No dependency
 or binary distribution changes. Exact measurement hashes, manufacturer factual
 references and source-use limits are in [the RF contract](BLOG_V4_RF_ROUTING.md).
+
+## Android JNI page-size policy
+
+The first-party package-local linker policy follows the official Google Android
+and Cargo interface facts linked in [ANDROID_PAGE_SIZE.md](ANDROID_PAGE_SIZE.md).
+No provider implementation, dependency, fixture or binary is imported. The
+existing NDK/Rust/cargo-ndk pins and their tool/runtime license boundaries remain
+as recorded above; the historical fixed-pin reproduction contract is preserved.
