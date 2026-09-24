@@ -96,6 +96,26 @@ standalone verification still cannot establish freshness. The private job is
 manual, read-only, bounded to 45 minutes and retains evidence for seven days.
 There are no signing, publication or automatic vendoring steps.
 
+Candidate authority is restricted to canonical repository ID `1334845447`
+(`R_kgDOT5AgBw`) and owner `h3lix1`, user ID `18344733`
+(`MDQ6VXNlcjE4MzQ0NzMz`). An early job condition checks the repository and
+initial/triggering owner context. Before creating build evidence or moving
+caches/installing tools, the candidate host guard reads the canonical repository
+and exact current run-attempt metadata. Both initial and triggering actor IDs,
+node IDs, user type and names must match, including on reruns; the repository
+must remain private, unarchived and default to master. Run ID/attempt, manual
+event, workflow path and tooling revision must match the active job. Missing,
+contradictory or unavailable metadata rejects the attempt.
+
+Only the build step receives the existing read-only job token, with `contents`
+and `actions` read permissions for these metadata requests. Redirects and
+oversized/ambiguous JSON are refused. A fixed, token-free authority projection
+is bound into the build receipt and checked against its run identity; the token
+never enters the build subprocess environment, receipt or command log.
+GitHub documents [run-attempt metadata](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run-attempt)
+and [initial/triggering contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts).
+This authority check applies only to the new candidate profile.
+
 Omitting `--profile` preserves historical current-pin reconstruction. Its
 workflow, fb34d8c expected bytes and Xcode 26.6 contract remain unchanged.
 Historical outputs are not subjected to the new candidate layout policy.

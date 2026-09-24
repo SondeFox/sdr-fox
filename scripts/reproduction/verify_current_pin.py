@@ -26,6 +26,7 @@ import tomllib
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profiles import HISTORICAL, PROFILES, load_manifest, select_profile
 from page_layout import check_link_args, inspect_layout
+from candidate_authority import verify_receipt_authority
 
 EXPECTED_PATH = Path(__file__).with_name("expected.json")
 CANONICAL_SOURCE_URLS = frozenset({
@@ -553,6 +554,7 @@ def verify_build_evidence(receipt_path, source, artifact_root, ndk, expected, *,
     if profile != HISTORICAL:
         require(receipt.get("reconstruction_profile") == profile.name and
                 receipt.get("expected_manifest_sha256") == manifest.sha256, "build-profile-or-manifest-mismatch")
+        verify_receipt_authority(receipt.get("authority"), receipt.get("runner"))
         xcode_argv, observed_xcode = checked_command(receipt, receipt_path.parent, "xcode")
         require(xcode_argv == ["xcodebuild", "-version"] and observed_xcode.strip() == profile.xcode_identity,
                 "build-xcode-identity-mismatch")

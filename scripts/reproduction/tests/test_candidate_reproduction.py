@@ -9,6 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from page_layout import check_link_args, inspect_layout
 from profiles import ANDROID_PAGE_SIZE, load_manifest
+from candidate_authority import projection
 import verify_current_pin as verify
 
 
@@ -102,7 +103,9 @@ class CandidateLinkTests(unittest.TestCase):
     def test_candidate_xcode_receipt_must_be_actual_version_command(self):
         manifest = load_manifest(ANDROID_PAGE_SIZE)
         receipt = {"reconstruction_profile": ANDROID_PAGE_SIZE.name,
-                   "expected_manifest_sha256": manifest.sha256}
+                   "expected_manifest_sha256": manifest.sha256,
+                   "runner": {"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "1", "GITHUB_SHA": "a" * 40},
+                   "authority": projection(1234, 1, "a" * 40)}
         with patch.object(verify, "read_build_receipt", return_value=(receipt, "a" * 64)), patch.object(verify, "checked_command", return_value=(["echo", "invented"], ANDROID_PAGE_SIZE.xcode_identity)), patch.object(verify, "build_path_roles") as roles, self.assertRaisesRegex(verify.VerificationError, "build-xcode-identity"):
             verify.verify_build_evidence(Path("/evidence/build-receipt.json"), Path("/source"), Path("/evidence/artifacts"), Path("/ndk"), manifest.document, manifest=manifest)
         roles.assert_not_called()

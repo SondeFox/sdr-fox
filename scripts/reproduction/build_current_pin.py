@@ -25,6 +25,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profiles import HISTORICAL, LOCK_SHA256, PROFILES, SOURCE_ROOT, load_manifest, select_profile
 from page_layout import check_link_args
+from candidate_authority import verify_candidate_authority
 
 # Retain the historical API/default while profiles hold subject identities.
 SOURCE_COMMIT = HISTORICAL.source_commit
@@ -72,7 +73,7 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def guard_host(env: dict[str, str]) -> None:
+def guard_host(env: dict[str, str], profile=HISTORICAL):
     expected = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
                 "RUNNER_OS": "macOS", "RUNNER_ARCH": "ARM64",
                 "GITHUB_REPOSITORY": "SondeFox/sdr-fox", "GITHUB_REF": "refs/heads/master",
@@ -88,6 +89,10 @@ def guard_host(env: dict[str, str]) -> None:
     for key in env:
         require(key not in overrides and not key.startswith(("GIT_CONFIG", "CARGO_TARGET_", "CARGO_BUILD_", "DYLD_")),
                 f"Unexpected build override: {key}")
+    if profile != HISTORICAL:
+        require(profile in PROFILES, "Unreviewed reconstruction profile")
+        return verify_candidate_authority(env)
+    return None
 
 
 def remap_flags(source: Path, home: Path) -> str:
@@ -439,7 +444,9 @@ class Builder:
 
     def run(self) -> None:
         env = self.original_env
-        guard_host(env)
+        authority = guard_host(env, self.profile)
+        if authority is not None:
+            self.receipt["authority"] = authority
         runner_temp = Path(env["RUNNER_TEMP"]).resolve()
         home = Path(env["HOME"]).resolve()
         require(self.source == Path(env["GITHUB_WORKSPACE"]).resolve() / "fixed-source", "Unexpected source checkout path")
@@ -549,8 +556,9 @@ def main() -> int:
     args = parser.parse_args()
     builder = None
     try:
-        guard_host(dict(os.environ))  # Never quarantine local developer caches.
-        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ), select_profile(args.profile))
+        profile = select_profile(args.profile)
+        guard_host(dict(os.environ), profile)  # Owner check precedes Builder/evidence creation.
+        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ), profile)
         builder.run()
         return 0
     except Exception as exc:

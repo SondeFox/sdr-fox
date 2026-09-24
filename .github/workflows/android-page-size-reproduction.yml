@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: sdr-fox-android16kb-2d257275-reproduction
@@ -12,7 +13,12 @@ concurrency:
 
 jobs:
   reproduce:
-    if: github.repository == 'SondeFox/sdr-fox' && github.ref == 'refs/heads/master' && github.event.repository.private
+    if: >-
+      github.repository == 'SondeFox/sdr-fox' && github.repository_id == '1334845447' &&
+      github.event.repository.node_id == 'R_kgDOT5AgBw' &&
+      github.ref == 'refs/heads/master' && github.event.repository.private &&
+      github.actor == 'h3lix1' && github.actor_id == '18344733' &&
+      github.triggering_actor == 'h3lix1'
     runs-on: xcode-27
     timeout-minutes: 45
     env:
@@ -35,6 +41,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: false
       - name: Build with fresh pinned tools and caches
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
           python3 tools/scripts/reproduction/build_current_pin.py
           --profile android16kb-2d257275
