@@ -1,6 +1,7 @@
 """Synthetic verifier failures; no captured/private bytes or native compilation."""
 import copy
 import importlib.util
+import itertools
 import json
 import os
 from pathlib import Path
@@ -537,6 +538,78 @@ class VerifierTests(unittest.TestCase):
         command("update-index", "--assume-unchanged", "Cargo.lock")
         (source / "Cargo.lock").write_text("version = 3\n")
         self.fails("hidden-source-state", lambda: v.check_source(source, expected))
+
+    def test_canonical_https_spellings_accept_all_manifest_fetch_push_combinations(self):
+        source, expected, command = self.make_source()
+        forms = ("https://github.com/SondeFox/sdr-fox", "https://github.com/SondeFox/sdr-fox.git")
+        for repository, fetch_url, push_url in itertools.product(forms, repeat=3):
+            with self.subTest(repository=repository, fetch=fetch_url, push=push_url):
+                command("remote", "set-url", "origin", fetch_url)
+                command("remote", "set-url", "--push", "origin", push_url)
+                result = v.check_source(source, expected | {"repository": repository})
+                self.assertEqual(result["commit"], expected["commit"])
+                self.assertEqual(result["tree"], expected["tree"])
+
+    def test_noncanonical_spellings_fail_for_manifest_fetch_and_push(self):
+        source, expected, command = self.make_source()
+        canonical = "https://github.com/SondeFox/sdr-fox.git"
+        rejected = (
+            "https://github.com/Example/sdr-fox.git",
+            "https://github.com/SondeFox/other.git",
+            "https://example.invalid/SondeFox/sdr-fox.git",
+            "https://github.com.example.invalid/SondeFox/sdr-fox.git",
+            "https://synthetic-user@github.com/SondeFox/sdr-fox.git",
+            "https://synthetic-user:synthetic-password@github.com/SondeFox/sdr-fox.git",
+            canonical + "?ref=master", canonical + "#master", canonical + "/extra",
+            "https://github.com/SondeFox/sdr-fox/extra", canonical + "/",
+            "https://github.com:443/SondeFox/sdr-fox.git",
+            "http://github.com/SondeFox/sdr-fox.git",
+            "ssh://git@github.com/SondeFox/sdr-fox.git",
+            "git@github.com:SondeFox/sdr-fox.git",
+            " " + canonical, canonical + " ", "\t" + canonical, canonical + "\t",
+            "\n" + canonical, canonical + "\n",
+        )
+        for location, url in itertools.product(("manifest", "fetch", "push"), rejected):
+            with self.subTest(location=location, url=url):
+                command("config", "--replace-all", "remote.origin.url", canonical)
+                command("config", "--replace-all", "remote.origin.pushurl", canonical)
+                checked = expected
+                if location == "manifest":
+                    checked = expected | {"repository": url}
+                    code = "noncanonical-source-repository"
+                else:
+                    key = "remote.origin.url" if location == "fetch" else "remote.origin.pushurl"
+                    command("config", "--replace-all", key, url)
+                    code = "noncanonical-source-url"
+                self.fails(code, lambda: v.check_source(source, checked))
+
+    def test_additional_canonical_fetch_or_push_urls_are_rejected(self):
+        source, expected, command = self.make_source()
+        canonical = "https://github.com/SondeFox/sdr-fox.git"
+        for key, extra in itertools.product(
+                ("remote.origin.url", "remote.origin.pushurl"),
+                (canonical, "https://github.com/SondeFox/sdr-fox")):
+            with self.subTest(key=key, extra=extra):
+                command("config", "--replace-all", "remote.origin.url", canonical)
+                command("config", "--replace-all", "remote.origin.pushurl", canonical)
+                command("config", "--add", key, extra)
+                self.fails("noncanonical-source-url", lambda: v.check_source(source, expected))
+
+    def test_an_additional_remote_is_rejected_even_when_canonical(self):
+        source, expected, command = self.make_source()
+        command("remote", "add", "extra", "https://github.com/SondeFox/sdr-fox")
+        self.fails("unexpected-source-remote", lambda: v.check_source(source, expected))
+
+    def test_canonical_alias_does_not_relax_source_identity_or_cleanliness(self):
+        source, expected, command = self.make_source()
+        command("remote", "set-url", "origin", "https://github.com/SondeFox/sdr-fox")
+        for key, code in (("commit", "source-commit-mismatch"), ("tree", "source-tree-mismatch"),
+                          ("verified_fresh_history_root", "source-root-mismatch"),
+                          ("cargo_lock_sha256", "source-lock-mismatch")):
+            with self.subTest(key=key):
+                self.fails(code, lambda: v.check_source(source, expected | {key: "0" * 64}))
+        (source / "Cargo.lock").write_text("version = 3\n")
+        self.fails("modified-source", lambda: v.check_source(source, expected))
 
     def test_noncanonical_origin_and_wrong_commit_rejected(self):
         source, expected, command = self.make_source()

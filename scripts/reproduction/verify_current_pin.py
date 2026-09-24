@@ -24,6 +24,10 @@ import tempfile
 import tomllib
 
 EXPECTED_PATH = Path(__file__).with_name("expected.json")
+CANONICAL_SOURCE_URLS = frozenset({
+    "https://github.com/SondeFox/sdr-fox",
+    "https://github.com/SondeFox/sdr-fox.git",
+})
 
 
 class VerificationError(Exception):
@@ -56,7 +60,7 @@ def run(argv, cwd=None, *, timeout=180):
     return result.stdout
 
 
-def git(source, *args, allow_empty=False):
+def git(source, *args, allow_empty=False, strip_output=True):
     argv = ["git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", str(source), *args]
     if allow_empty:
         try:
@@ -64,8 +68,10 @@ def git(source, *args, allow_empty=False):
         except (OSError, subprocess.TimeoutExpired):
             raise VerificationError("source-command-unavailable") from None
         require(result.returncode == 0, "source-command-failed")
-        return result.stdout.strip()
-    return run(argv).strip()
+        output = result.stdout
+    else:
+        output = run(argv)
+    return output.strip() if strip_output else output
 
 
 def safe_file(root, relative):
@@ -103,6 +109,7 @@ def validate_environment(source, env):
 
 
 def check_source(source, expected):
+    require(expected["repository"] in CANONICAL_SOURCE_URLS, "noncanonical-source-repository")
     require(git(source, "rev-parse", "--show-toplevel") == str(source), "source-not-repository-root")
     require(git(source, "rev-parse", "--is-shallow-repository") == "false", "shallow-source")
     require(git(source, "rev-parse", "HEAD") == expected["commit"], "source-commit-mismatch")
@@ -110,7 +117,10 @@ def check_source(source, expected):
     require(git(source, "rev-list", "--max-parents=0", "HEAD").splitlines() == [expected["verified_fresh_history_root"]], "source-root-mismatch")
     require(git(source, "remote").splitlines() == ["origin"], "unexpected-source-remote")
     for args in (("remote", "get-url", "--all", "origin"), ("remote", "get-url", "--push", "--all", "origin")):
-        require(git(source, *args).splitlines() == [expected["repository"]], "noncanonical-source-url")
+        # Only the two exact canonical spellings are equivalent. Preserve URL
+        # whitespace so malformed remotes cannot pass through generic stripping.
+        urls = git(source, *args, strip_output=False).splitlines()
+        require(len(urls) == 1 and urls[0] in CANONICAL_SOURCE_URLS, "noncanonical-source-url")
     require(not git(source, "status", "--porcelain", "--untracked-files=no", allow_empty=True), "modified-source")
     # Hidden modifications must not be omitted by assume-unchanged/skip-worktree.
     tracked = git(source, "ls-files", "-v").splitlines()
