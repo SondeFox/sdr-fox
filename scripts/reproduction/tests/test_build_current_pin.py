@@ -28,7 +28,7 @@ class HostTests(unittest.TestCase):
         build.guard_host(self.valid())
         for key, value in (("RUNNER_ENVIRONMENT", "self-hosted"), ("GITHUB_REPOSITORY", "fork/sdr-fox"),
                            ("GITHUB_REF", "refs/heads/candidate"), ("GITHUB_EVENT_NAME", "pull_request"), ("REPRO_PRIVATE_REPOSITORY", "false"),
-                           ("CARGO_HOME", "/cargo"), ("RUSTFLAGS", "-D warnings"),
+                           ("CARGO_HOME", "/cargo"), ("RUSTFLAGS", "-D warnings"), ("RUSTC", "/unreviewed/rustc"),
                            ("GIT_CONFIG_COUNT", "1"), ("CARGO_BUILD_RUSTC_WRAPPER", "/wrapper")):
             with self.subTest(key=key), self.assertRaises(build.BuildError):
                 build.guard_host(self.valid() | {key: value})
@@ -235,6 +235,80 @@ class MetadataPrefetchTests(unittest.TestCase):
             self.assertEqual(header.read_bytes(), b"original reviewed header\n")
             self.assertEqual(worker.env["CARGO_NET_OFFLINE"], "true")
             self.assertEqual(worker.receipt["artifacts"], [])
+
+
+class AndroidCompilerBindingTests(unittest.TestCase):
+    def worker(self, directory, version=build.RUSTC_VERSION):
+        root = Path(directory)
+        worker = build.Builder(root, root / "evidence", {"HOME": str(root), "PATH": "/unselected/bin"})
+        rustup = root / "rustup"
+        compiler = rustup / "toolchains" / build.RUST_TOOLCHAIN / "bin/rustc"
+        compiler.parent.mkdir(parents=True)
+        compiler.write_bytes(b"synthetic compiler bytes; never executed")
+        worker.env.update(RUSTUP_HOME=str(rustup), CARGO_NET_OFFLINE="true", RUSTFLAGS="reviewed remaps unchanged")
+        worker.roles["$RUSTUP_HOME"] = str(rustup)
+        inventory = [{"path": str(compiler.relative_to(rustup)), "sha256": build.sha256(compiler)}]
+        (worker.evidence / "rust-toolchain-inventory.json").write_text(json.dumps(inventory))
+        calls = []
+        def command(label, argv, **kwargs):
+            calls.append((label, argv, kwargs))
+            if label == "android-rustc-version":
+                raw = (version + "\n").encode()
+                log = worker.evidence / "logs/android-rustc-version.log"
+                log.write_bytes(raw)
+                worker.receipt["commands"].append({"label": label, "status": "pass", "exit_code": 0,
+                    "log": str(log.relative_to(worker.evidence)), "log_sha256": hashlib.sha256(raw).hexdigest()})
+                return raw.decode()
+            self.assertEqual(label, "build-android")
+            return "synthetic Android diagnostics"
+        worker.command = command
+        return worker, compiler, calls
+
+    def test_only_android_child_gets_exact_directly_verified_compiler(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker, compiler, calls = self.worker(directory)
+            parent_before, original_before = dict(worker.env), dict(worker.original_env)
+            self.assertEqual(worker.build_android(compiler.parent), "synthetic Android diagnostics")
+            self.assertEqual([call[0] for call in calls], ["android-rustc-version", "build-android"])
+            self.assertEqual(calls[0][1], [str(compiler), "--version"])
+            self.assertEqual(calls[1][2]["env"], parent_before | {"RUSTC": str(compiler)})
+            self.assertEqual(worker.env, parent_before)
+            self.assertEqual(worker.original_env, original_before)
+            self.assertNotIn("RUSTC", worker.env)
+            self.assertEqual(worker.receipt["android_compiler"]["path"], "$RUSTUP_HOME/toolchains/" + build.RUST_TOOLCHAIN + "/bin/rustc")
+            self.assertEqual(worker.receipt["android_compiler"]["sha256"], build.sha256(compiler))
+            self.assertEqual(worker.receipt["android_compiler"]["version"], build.RUSTC_VERSION)
+
+    def test_missing_or_wrong_selected_compiler_stops_before_build(self):
+        for mode in ("missing", "wrong-directory", "relative", "inventory-mismatch", "missing-inventory-entry", "parent-override"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                worker, compiler, calls = self.worker(directory)
+                selected = compiler.parent
+                if mode == "missing":
+                    compiler.unlink()
+                elif mode == "wrong-directory":
+                    selected = selected.parent / "other-bin"
+                elif mode == "relative":
+                    selected = Path("relative/bin")
+                elif mode == "inventory-mismatch":
+                    compiler.write_bytes(b"changed after toolchain inventory")
+                elif mode == "missing-inventory-entry":
+                    (worker.evidence / "rust-toolchain-inventory.json").write_text("[]")
+                else:
+                    worker.env["RUSTC"] = "/unreviewed/rustc"
+                with self.assertRaises(build.BuildError):
+                    worker.build_android(selected)
+                self.assertEqual(calls, [])
+                self.assertNotIn("android_compiler", worker.receipt)
+
+    def test_wrong_direct_version_stops_before_android_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker, compiler, calls = self.worker(directory, version="rustc 1.96.0 (synthetic wrong version)")
+            with self.assertRaises(build.BuildError):
+                worker.build_android(compiler.parent)
+            self.assertEqual([call[0] for call in calls], ["android-rustc-version"])
+            self.assertNotIn("RUSTC", worker.env)
+            self.assertNotIn("android_compiler", worker.receipt)
 
 
 if __name__ == '__main__':
