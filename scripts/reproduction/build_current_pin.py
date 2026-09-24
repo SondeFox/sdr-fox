@@ -393,6 +393,19 @@ class Builder:
         self.receipt["android_effective_commands"] = self.sanitized(observations)
         self.save_receipt()
 
+    def prefetch_locked_metadata(self):
+        # cbindgen's metadata query includes every target and all features, even
+        # though the production builds use only Mac and Android. Target-filtered
+        # fetching missed already-locked Windows metadata crates on a cold host.
+        # Fetch the complete lockfile without compiling those other targets,
+        # then prove the same metadata query works offline BEFORE deleting the
+        # header. Never weaken the later actual-header-regeneration check.
+        self.command("fetch-locked-crates", ["cargo", "fetch", "--locked"])
+        self.env["CARGO_NET_OFFLINE"] = "true"
+        self.command("preflight-cabi-metadata", ["cargo", "metadata", "--locked", "--offline",
+            "--all-features", "--format-version", "1", "--manifest-path",
+            str(self.source / "crates/sdr-fox-cabi/Cargo.toml")])
+
     def run(self) -> None:
         env = self.original_env
         guard_host(env)
@@ -463,11 +476,7 @@ class Builder:
                                              "ANDROID_NDK_REVISION": NDK_REVISION, "ANDROID_API": 21, "MACOSX_DEPLOYMENT_TARGET": "14.0"}
         # A fresh default registry is separate from cargo-ndk's bootstrap registry.
         require(not (home / ".cargo" / "registry").exists() and not (home / ".cargo" / "git").exists(), "Default production Cargo cache was populated before fetch")
-        fetch = ["cargo", "fetch", "--locked"]
-        for target in TARGETS:
-            fetch += ["--target", target]
-        self.command("fetch-locked-crates", fetch)
-        self.env["CARGO_NET_OFFLINE"] = "true"
+        self.prefetch_locked_metadata()
         graphs = self.evidence / "graphs"
         graphs.mkdir()
         for target in TARGETS:
