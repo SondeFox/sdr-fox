@@ -11,6 +11,7 @@ import re
 SOURCE_ROOT = "7bcb45cd2a993240abe7f41dcaeec4a84bc04aeb"
 LOCK_SHA256 = "62ab5b79776c322f9776c8c41f8a6707fac6dfcf6a49b791fcb30e10999b4f76"
 MANIFEST_ROOT = Path(__file__).resolve().parent
+HOST_BUILD_STRIP_CONFIG = 'profile.release.build-override.strip="none"'
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class Profile:
     evidence_kind: str
     xcode_identity: str | None = None
     android_link_args: tuple[str, ...] = ()
+    cargo_build_override: str | None = None
 
 
 HISTORICAL = Profile(
@@ -38,7 +40,20 @@ ANDROID_PAGE_SIZE = Profile(
     "android-page-size-candidate-verification", "Xcode 27.0\nBuild version 27A266a",
     ("-Wl,-z,max-page-size=16384", "-Wl,-z,common-page-size=16384"),
 )
-PROFILES = (HISTORICAL, ANDROID_PAGE_SIZE)
+ANDROID_PAGE_SIZE_HOSTSAFE = Profile(
+    "android16kb-2d257275-hostsafe", ANDROID_PAGE_SIZE.source_commit,
+    ANDROID_PAGE_SIZE.source_tree, "android-page-size-hostsafe-expected.json",
+    ANDROID_PAGE_SIZE.developer_directory, "android-page-size-hostsafe-candidate-verification",
+    ANDROID_PAGE_SIZE.xcode_identity, ANDROID_PAGE_SIZE.android_link_args,
+    HOST_BUILD_STRIP_CONFIG,
+)
+PROFILES = (HISTORICAL, ANDROID_PAGE_SIZE, ANDROID_PAGE_SIZE_HOSTSAFE)
+
+
+def build_override_args(profile):
+    if profile not in PROFILES:
+        raise ValueError("Unreviewed reconstruction profile")
+    return ["--config", profile.cargo_build_override] if profile.cargo_build_override else []
 
 
 def select_profile(name):
@@ -105,6 +120,8 @@ class Manifest:
                 raise ValueError("Manifest Xcode identity mismatch")
             if data.get("android_link_args") != list(self.profile.android_link_args):
                 raise ValueError("Manifest JNI link policy mismatch")
+        if data.get("cargo_build_override") != self.profile.cargo_build_override:
+            raise ValueError("Manifest host build policy mismatch")
 
     @property
     def document(self):

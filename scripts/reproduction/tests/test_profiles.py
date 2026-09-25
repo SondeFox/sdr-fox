@@ -15,7 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_current_pin as build
 import verify_current_pin as verify
-from profiles import ANDROID_PAGE_SIZE, HISTORICAL, Manifest, load_manifest, select_profile
+from profiles import ANDROID_PAGE_SIZE, ANDROID_PAGE_SIZE_HOSTSAFE, HISTORICAL, Manifest, load_manifest, select_profile
 
 
 class ProfileTests(unittest.TestCase):
@@ -163,7 +163,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(workflow.count("GH_TOKEN: ${{ github.token }}"), 1)
         self.assertIn("name: Build with fresh pinned tools and caches\n        env:\n          GH_TOKEN:", workflow)
         self.assertIn("ref: " + ANDROID_PAGE_SIZE.source_commit, workflow)
-        self.assertEqual(workflow.count("--profile " + ANDROID_PAGE_SIZE.name), 2)
+        self.assertEqual(re.findall(r"--profile (\S+)", workflow), [ANDROID_PAGE_SIZE_HOSTSAFE.name] * 2)
         pins = re.findall(r"uses: (\S+)", workflow)
         self.assertEqual(len(pins), 3)
         self.assertTrue(all(re.fullmatch(r"actions/(?:checkout|upload-artifact)@[0-9a-f]{40}", value) for value in pins))

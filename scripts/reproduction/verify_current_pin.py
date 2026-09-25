@@ -24,9 +24,10 @@ import tempfile
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from profiles import HISTORICAL, PROFILES, load_manifest, select_profile
+from profiles import HISTORICAL, PROFILES, build_override_args, load_manifest, select_profile
 from page_layout import check_link_args, inspect_layout
 from candidate_authority import verify_receipt_authority
+from host_build_policy import inspect_macos_build, verify_target_strip
 
 EXPECTED_PATH = Path(__file__).with_name("expected.json")
 CANONICAL_SOURCE_URLS = frozenset({
@@ -522,7 +523,7 @@ def verify_android_observations(receipt, evidence_root, roles, expected, profile
     rows = receipt.get("android_effective_commands")
     require(type(rows) is list and len(rows) == 2 and all(type(row) is dict for row in rows), "android-observations-missing")
     argv, log = checked_command(receipt, evidence_root, "build-android")
-    require(argv == ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never",
+    require(argv == ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", *build_override_args(profile), "-vv", "--color", "never",
                      "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], "android-build-command-mismatch")
     measured = parse_android_build(log, roles)
     require({row.get("abi") for row in rows} == set(ANDROID_TARGETS), "android-observations-duplicate-or-unknown")
@@ -530,6 +531,8 @@ def verify_android_observations(receipt, evidence_root, roles, expected, profile
     require(sha256(probe.read_bytes()) == expected["build_evidence"]["android_probe_source_sha256"], "android-probe-source-mismatch")
     for actual in measured:
         row = next(r for r in rows if r["abi"] == actual["abi"])
+        if profile.cargo_build_override:
+            verify_target_strip(actual["rustc_argv"])
         if profile.android_link_args:
             page_args = check_link_args(actual["rustc_argv"], profile.android_link_args)
             require(row.get("page_link_args") == page_args, "android-page-link-policy-mismatch")
@@ -559,14 +562,25 @@ def verify_build_evidence(receipt_path, source, artifact_root, ndk, expected, *,
         require(xcode_argv == ["xcodebuild", "-version"] and observed_xcode.strip() == profile.xcode_identity,
                 "build-xcode-identity-mismatch")
     roles = build_path_roles(source, ndk, profile)
+    host_policy = None
+    if profile.cargo_build_override:
+        require(receipt.get("cargo_build_override") == profile.cargo_build_override, "build-host-policy-mismatch")
+        mac_argv, mac_log = checked_command(receipt, receipt_path.parent, "build-macos")
+        require(mac_argv == ["cargo", "build", *build_override_args(profile), "-vv", "--locked", "--offline", "--release",
+                             "--target", "aarch64-apple-darwin", "-p", "sdr-fox-cabi"], "macos-build-command-mismatch")
+        host_policy = inspect_macos_build(normalized_paths(mac_log, roles),
+                                         "$RUSTUP_HOME/toolchains/1.95.0-aarch64-apple-darwin/bin/rustc")
     apple = observed_apple_tools(roles)
     verify_observed_tools(receipt, receipt_path.parent, roles, apple)
     smoke = verify_c_smoke(receipt, receipt_path.parent, artifact_root, roles, expected, apple)
     android = verify_android_observations(receipt, receipt_path.parent, roles, expected, profile)
-    return {"build_receipt_sha256": receipt_hash, "c_link_smoke": smoke, "android_targets": android,
+    result = {"build_receipt_sha256": receipt_hash, "c_link_smoke": smoke, "android_targets": android,
             "apple_tools": {name: {"sha256": value["sha256"], "version_sha256": sha256(value["version"].encode())}
                             for name, value in apple.items() if name != "darwin"},
             "darwin_release": apple["darwin"]["release"], "darwin_version_sha256": sha256(apple["darwin"]["version"].encode())}
+    if host_policy is not None:
+        result["host_build_policy"] = host_policy
+    return result
 
 
 def validate_artifact_layout(root, artifacts):

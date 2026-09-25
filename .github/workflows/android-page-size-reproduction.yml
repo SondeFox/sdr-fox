@@ -1,4 +1,4 @@
-name: Android 16 KB candidate native reconstruction
+name: Android 16 KB host-safe candidate reconstruction
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: sdr-fox-android16kb-2d257275-reproduction
+  group: sdr-fox-android16kb-2d257275-hostsafe-reproduction
   cancel-in-progress: false
 
 jobs:
@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           python3 tools/scripts/reproduction/build_current_pin.py
-          --profile android16kb-2d257275
+          --profile android16kb-2d257275-hostsafe
           --source-dir "$GITHUB_WORKSPACE/fixed-source"
           --evidence-dir "$RUNNER_TEMP/sondefox-reproduction"
       - name: Independently inspect the complete candidate set
@@ -56,7 +56,7 @@ jobs:
           export RUSTUP_HOME="$RUNNER_TEMP/sondefox-reproduction-rustup"
           export PATH="$RUSTUP_HOME/toolchains/1.95.0-aarch64-apple-darwin/bin:$RUNNER_TEMP/sondefox-reproduction-tools/bin:$PATH"
           python3 tools/scripts/reproduction/verify_current_pin.py \
-            --profile android16kb-2d257275 \
+            --profile android16kb-2d257275-hostsafe \
             --source-dir "$GITHUB_WORKSPACE/fixed-source" \
             --artifact-dir "$RUNNER_TEMP/sondefox-reproduction/artifacts" \
             --ndk-dir "$ANDROID_SDK_ROOT/ndk/27.2.12479018" \
@@ -66,7 +66,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: android16kb-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          name: android16kb-hostsafe-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/sondefox-reproduction/
           if-no-files-found: error
           retention-days: 7
