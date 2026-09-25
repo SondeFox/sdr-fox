@@ -5,7 +5,7 @@ Python, Android JNI, and command-line interfaces.
 
 > **Development status:** the APIs may still change. Initial public source
 > visibility requires the repository's provenance, security, packaging, and
-> hardware review. Source availability alone does not announce a supported
+> hardware validation. Source availability alone does not announce a supported
 > binary release or hardware qualification. Never graft the restricted legacy
 > Git history into this clean repository.
 
