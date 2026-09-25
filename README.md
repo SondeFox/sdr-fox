@@ -3,10 +3,11 @@
 One radio API for RTL-SDR and Airspy receivers, written in Rust with C,
 Python, Android JNI, and command-line interfaces.
 
-> **Private incubation:** the implementation is active and its APIs may still
-> change. Public release is gated on provenance, security, packaging, and
-> hardware review. Do not publish this repository or graft its legacy Git
-> history into this clean snapshot.
+> **Development status:** the APIs may still change. Initial public source
+> visibility requires the repository's provenance, security, packaging, and
+> hardware review. Source availability alone does not announce a supported
+> binary release or hardware qualification. Never graft the restricted legacy
+> Git history into this clean repository.
 
 ## What is here
 
@@ -96,9 +97,10 @@ rewritten, renamed, or removed and the notices were corrected. The concise
 record is in [`PROVENANCE-AUDIT.md`](PROVENANCE-AUDIT.md), with upstream roles
 in [`docs/UPSTREAMS.md`](docs/UPSTREAMS.md).
 
-The audit is engineering evidence, not legal advice. Public release remains a
-deliberate review gate, and legacy commits, tags, pull-request refs, and audit
-evidence must stay in the restricted archive.
+The audit is engineering evidence, not legal advice. Initial public source
+visibility remains a deliberate review gate. Legacy commits, tags,
+pull-request refs, and audit evidence stay in the restricted archive. Binary
+distribution has separate artifact, dependency notice, and hardware gates.
 
 ## Security and contributing
 
@@ -114,8 +116,10 @@ see [`LICENSE-MIT`](LICENSE-MIT) and
 [`LICENSE-APACHE`](LICENSE-APACHE). Third-party acknowledgements and desktop
 libusb distribution notes are in [`NOTICE`](NOTICE).
 
-Repository access is private during incubation. Making the project public is
-a separate approval, not an implication of the license files being present.
+The license files state the current source terms. They do not by
+themselves approve a repository-visibility change, a GitHub artifact, or a
+signed application release. See the [contribution status](CONTRIBUTING.md)
+before submitting code.
 
 ## macOS direct USB update (2026-09-06)
 
