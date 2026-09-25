@@ -23,7 +23,7 @@ import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from profiles import HISTORICAL, LOCK_SHA256, PROFILES, SOURCE_ROOT, load_manifest, select_profile
+from profiles import HISTORICAL, LOCK_SHA256, PROFILES, SOURCE_ROOT, build_override_args, load_manifest, select_profile
 from page_layout import check_link_args
 from candidate_authority import verify_candidate_authority
 
@@ -264,6 +264,8 @@ class Builder:
                         "scope": "One hosted reconstruction attempt; acceptance belongs to independent verifier"}
         if self.manifest:
             self.receipt.update(reconstruction_profile=profile.name, expected_manifest_sha256=self.manifest.sha256)
+        if profile.cargo_build_override:
+            self.receipt["cargo_build_override"] = profile.cargo_build_override
         self.evidence.mkdir(parents=False, exist_ok=False)
         (self.evidence / "logs").mkdir()
         self.env = {key: env[key] for key in ("HOME", "PATH", "TMPDIR", "DEVELOPER_DIR", "ANDROID_SDK_ROOT") if key in env}
@@ -421,26 +423,42 @@ class Builder:
             "--all-features", "--format-version", "1", "--manifest-path",
             str(self.source / "crates/sdr-fox-cabi/Cargo.toml")])
 
-    def build_android(self, rust_bin):
+    def verified_compiler(self, rust_bin, platform_name):
+        require(platform_name in ("android", "macos"), "Unexpected compiler evidence role")
+        role = "Android" if platform_name == "android" else "Mac"
         # Cargo otherwise prints a bare `rustc` even when our PATH selects the
         # correct toolchain. Bind the already installed, inventoried compiler
         # explicitly in this child only; neither parser may infer PATH identity.
         compiler = rust_bin / "rustc"
         rustup_home = Path(self.env["RUSTUP_HOME"])
         expected = rustup_home / "toolchains" / RUST_TOOLCHAIN / "bin/rustc"
-        require(compiler.is_absolute() and compiler == expected and compiler.is_file(), "Missing pinned Android compiler")
+        require(compiler.is_absolute() and compiler == expected and compiler.is_file(), f"Missing pinned {role} compiler")
         require("RUSTC" not in self.env, "Unexpected parent compiler override")
         inventory = json.loads((self.evidence / "rust-toolchain-inventory.json").read_text())
         matches = [item for item in inventory if item.get("path") == str(compiler.relative_to(rustup_home))]
         compiler_sha256 = sha256(compiler)
-        require(len(matches) == 1 and matches[0].get("sha256") == compiler_sha256, "Pinned Android compiler inventory mismatch")
-        version = self.command("android-rustc-version", [str(compiler), "--version"], query=True).strip()
-        require(version == RUSTC_VERSION, "Unexpected pinned Android compiler version")
-        self.receipt["android_compiler"] = {"path": self.sanitized(str(compiler)), "sha256": compiler_sha256,
-            "version": version, "version_log": self.log_reference("android-rustc-version")}
+        require(len(matches) == 1 and matches[0].get("sha256") == compiler_sha256, f"Pinned {role} compiler inventory mismatch")
+        label = platform_name + "-rustc-version"
+        version = self.command(label, [str(compiler), "--version"], query=True).strip()
+        require(version == RUSTC_VERSION, f"Unexpected pinned {role} compiler version")
+        self.receipt[platform_name + "_compiler"] = {"path": self.sanitized(str(compiler)), "sha256": compiler_sha256,
+            "version": version, "version_log": self.log_reference(label)}
         self.save_receipt()
+        return compiler
+
+    def build_macos(self, rust_bin):
+        args = ["cargo", "build", *build_override_args(self.profile)]
+        child_env = self.env | {"MACOSX_DEPLOYMENT_TARGET": "14.0"}
+        if self.profile.cargo_build_override:
+            args += ["-vv"]
+            child_env["RUSTC"] = str(self.verified_compiler(rust_bin, "macos"))
+        args += ["--locked", "--offline", "--release", "--target", TARGETS[0], "-p", "sdr-fox-cabi"]
+        return self.command("build-macos", args, env=child_env, query=bool(self.profile.cargo_build_override))
+
+    def build_android(self, rust_bin):
+        compiler = self.verified_compiler(rust_bin, "android")
         child_env = self.env | {"RUSTC": str(compiler)}
-        return self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], env=child_env, query=True)
+        return self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", *build_override_args(self.profile), "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], env=child_env, query=True)
 
     def run(self) -> None:
         env = self.original_env
@@ -532,9 +550,7 @@ class Builder:
         before = header.read_bytes()
         self.receipt["header_regeneration"] = {"removed_before_build": True, "original_sha256": hashlib.sha256(before).hexdigest()}
         self.save_receipt()
-        build_regenerating_header(header, lambda: self.command(
-            "build-macos", ["cargo", "build", "--locked", "--offline", "--release", "--target", TARGETS[0], "-p", "sdr-fox-cabi"],
-            env=self.env | {"MACOSX_DEPLOYMENT_TARGET": "14.0"}))
+        build_regenerating_header(header, lambda: self.build_macos(rust_bin))
         self.receipt["header_regeneration"]["regenerated_exactly"] = True
         self.copy_artifact(self.source / "target" / TARGETS[0] / "release" / "libsdr_fox.a", "libsdr_fox_ffi.a")
         self.copy_artifact(header, "sdr_fox.h")

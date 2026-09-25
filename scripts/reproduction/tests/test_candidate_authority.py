@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_current_pin as build
 import candidate_authority as authority
-from profiles import ANDROID_PAGE_SIZE, HISTORICAL
+from profiles import ANDROID_PAGE_SIZE, ANDROID_PAGE_SIZE_HOSTSAFE, HISTORICAL
 
 
 TOKEN = "synthetic-test-token-not-a-credential"
@@ -43,13 +43,14 @@ def metadata(attempt=1):
 
 class CandidateAuthorityTests(unittest.TestCase):
     def test_initial_and_owner_rerun_bind_current_attempt_and_safe_projection(self):
-        for attempt in (1, 2):
-            with self.subTest(attempt=attempt), patch.object(authority, "read_json", side_effect=metadata(attempt)) as read, patch.object(build.platform, "system", return_value="Darwin"), patch.object(build.platform, "machine", return_value="arm64"):
-                result = build.guard_host(context(attempt), ANDROID_PAGE_SIZE)
-            self.assertEqual(result, authority.projection(1234, attempt, "a" * 40))
-            self.assertEqual([call.args[0] for call in read.call_args_list],
-                             ["/repos/SondeFox/sdr-fox", f"/repos/SondeFox/sdr-fox/actions/runs/1234/attempts/{attempt}"])
-            self.assertNotIn(TOKEN, json.dumps(result))
+        for profile in (ANDROID_PAGE_SIZE, ANDROID_PAGE_SIZE_HOSTSAFE):
+            for attempt in (1, 2):
+                with self.subTest(profile=profile.name, attempt=attempt), patch.object(authority, "read_json", side_effect=metadata(attempt)) as read, patch.object(build.platform, "system", return_value="Darwin"), patch.object(build.platform, "machine", return_value="arm64"):
+                    result = build.guard_host(context(attempt), profile)
+                self.assertEqual(result, authority.projection(1234, attempt, "a" * 40))
+                self.assertEqual([call.args[0] for call in read.call_args_list],
+                                 ["/repos/SondeFox/sdr-fox", f"/repos/SondeFox/sdr-fox/actions/runs/1234/attempts/{attempt}"])
+                self.assertNotIn(TOKEN, json.dumps(result))
 
     def test_context_drift_rejected_before_any_identity_request(self):
         cases = {"GITHUB_REPOSITORY_ID": "999999", "GITHUB_ACTOR": "another-user",

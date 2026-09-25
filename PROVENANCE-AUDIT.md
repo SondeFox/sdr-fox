@@ -145,3 +145,10 @@ no copied provider implementation or external executable fixture. The new
 manifest records inspected local source2d outputs for a later independent
 fresh-host comparison; it is not a public-release or hardware acceptance.
 Historical fb34d8c identities and receipts remain separate and unchanged.
+
+The distinct host-safe profile adds the official Cargo build-dependency strip
+override as a recorded build input while preserving runtime source 2d. Its new
+five-output manifest describes actual new bytes; it does not replace the
+original candidate manifest or failed hosted evidence. The command/log checker
+and synthetic tests are independently authored first-party tooling; no issue
+reporter's implementation was copied. See `docs/ANDROID_PAGE_SIZE.md`.

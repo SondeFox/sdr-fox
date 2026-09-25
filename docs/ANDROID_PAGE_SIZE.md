@@ -69,13 +69,13 @@ separate. The source change neither publishes nor replaces a consumer binary.
 
 ## Fixed candidate reconstruction
 
-The manual **Android 16 KB candidate native reconstruction** workflow uses
+The manual **Android 16 KB host-safe candidate reconstruction** workflow uses
 reviewed master tooling and fixed runtime
 `2d25727523646c166771f066634b16f60ce22977`, tree
 `021353fabc37dca936cede81b4ce54808c4e5c83`. It selects the authored
-`android16kb-2d257275` profile in both the builder and independent verifier.
+`android16kb-2d257275-hostsafe` profile in both the builder and independent verifier.
 Callers cannot supply a source revision, expected manifest or tool path.
-`scripts/reproduction/android-page-size-expected.json` freezes all five
+`scripts/reproduction/android-page-size-hostsafe-expected.json` freezes all five
 inspected local reference outputs; it is a comparison target, not evidence
 that a hosted reconstruction, consumer refresh or hardware test has passed.
 
@@ -118,6 +118,46 @@ This authority check applies only to the new candidate profile.
 
 Omitting `--profile` preserves historical current-pin reconstruction. Its
 workflow, fb34d8c expected bytes and Xcode 26.6 contract remain unchanged.
-Historical outputs are not subjected to the new candidate layout policy.
+The original `android16kb-2d257275` profile and
+`android-page-size-expected.json` likewise retain their initial command/byte
+contract. Neither prior manifest is replaced by the host-safe reference.
+Historical fb34d8c outputs are not subjected to the candidate layout policy.
 The lightweight guard/profile/inspection regressions run in the existing
 rustfmt CI job and require no NDK, hardware, secrets or extra runner job.
+
+## Host build stripping
+
+Exact runtime source 2d still has `[profile.release] strip = "symbols"`.
+On the macOS 27 hosted image the original candidate stopped at Rust E0463
+loading `thiserror_impl`; the failed host's underlying dyld error was not
+retained. A local stripped proc-macro had a string-pool offset misaligned to
+eight bytes. This supports, but does not prove, an OS-specific loader rejection.
+
+The new profile adds only Cargo's documented host build-dependency override:
+
+```sh
+cargo +1.95.0 build \
+  --config 'profile.release.build-override.strip="none"' \
+  -vv --locked --offline --release --target aarch64-apple-darwin -p sdr-fox-cabi
+```
+
+Use the same explicit `--config` after `build` in the cargo-ndk command in
+the Android README. Keep the reviewed source/Cargo/HOME remaps, existing
+Rust/NDK pins and `MACOSX_DEPLOYMENT_TARGET=14.0`. The recipe does not change
+runtime Cargo.toml or general release stripping. Official Cargo documentation
+describes [build overrides](https://doc.rust-lang.org/cargo/reference/profiles.html#build-dependencies)
+and [command-line configuration](https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides).
+
+Verification binds the exact new Mac/Android command, the receipt's policy,
+the effective unstripped host proc-macro/build-script commands, and
+`strip=symbols` on actual Mac and JNI runtime commands. The host-safe Mac
+compiler is also explicitly bound to the pinned inventoried rustc. Plain
+release commands remain distinct; local success is not macOS 27 hosted proof.
+
+Changing the host profile also changes target crate identities. The measured
+Mac archive has 21 changed object payloads and a net 32-byte size increase;
+this does not mean only 32 bytes differ. Both JNI hashes change as well.
+The new manifest therefore records a separate five-output reference rather
+than relabeling earlier bytes. Header/Kotlin bytes and C/JNI declarations
+remain unchanged. Local C-link/run, ABI, package and page-layout checks do not
+replace independent hosted reconstruction or final app/device acceptance.
