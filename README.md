@@ -3,11 +3,10 @@
 One radio API for RTL-SDR and Airspy receivers, written in Rust with C,
 Python, Android JNI, and command-line interfaces.
 
-> **Development status:** the APIs may still change. Initial public source
-> visibility requires the repository's provenance, security, packaging, and
-> hardware validation. Source availability alone does not announce a supported
-> binary release or hardware qualification. Never graft the restricted legacy
-> Git history into this clean repository.
+> **Public source:** the APIs may still change. The source is available under
+> MIT OR Apache-2.0; no supported binary release or general hardware
+> qualification is announced. Never graft the restricted legacy Git history
+> into this clean repository.
 
 ## What is here
 

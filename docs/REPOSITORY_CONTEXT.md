@@ -4,7 +4,7 @@
 
 - **Canonical repository:** `https://github.com/SondeFox/sdr-fox`
 - **Canonical branch:** `master`
-- **Current visibility:** private
+- **Current visibility:** public source; external code intake remains closed
 - **Primary consumer:** `https://github.com/SondeFox/SondeFox`
 
 sdr-fox is the SondeFox organization's shared receiver and signal-processing
@@ -48,13 +48,23 @@ generated radio captures/images, and private analysis folders.
   toolchain. The declared Rust 1.86 minimum remains unverified by these gates;
   compiler baseline updates require review.
 
-## Public-release gate
+## Public-source status and release gates
 
-Private development does not imply approval to publish. Before changing
-visibility, the owner must complete provenance and legal review, dependency
-and notice review, secret scanning, hardware validation, documentation review,
-and a release-candidate build from a fresh clone. The clean repository must
-still have one lineage with no legacy refs or releases.
+The owner made this clean-history source repository public on 2026-09-26 under
+its existing MIT OR Apache-2.0 terms. The decision followed an engineering
+provenance review, owner authorship and bot/AI adoption statements, source and
+GitHub-surface scans, dependency/notice review, a fresh-clone CLI build, and a
+bounded physical Airspy enumeration/open/stream check. That five-second stream
+at a negotiated 2.5 MS/s reported zero drops; it did not test RF sensitivity,
+on-air decoding, other receiver models, or final application binaries. These
+observations are not independent legal or patent certification.
+
+No supported binary release is announced. Before publishing one, qualify its
+exact source, build inputs, notices, signer, platform and physical behavior.
+External code intake stays closed until versioned agreements, an identity and
+authority register, DCO/coauthor coverage, and a protected current-head
+clearance check are operating. The clean repository retains one lineage with
+no legacy refs or releases.
 
 See [`PROVENANCE-AUDIT.md`](../PROVENANCE-AUDIT.md), [`SECURITY.md`](../SECURITY.md),
 and [`UPSTREAMS.md`](UPSTREAMS.md). Future coding agents should update this file
