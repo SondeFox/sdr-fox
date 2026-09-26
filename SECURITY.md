@@ -2,8 +2,10 @@
 
 ## Supported code
 
-During private incubation, only the current `master` branch is supported.
-There are no supported public releases yet.
+The current `master` branch is the supported source for security fixes. Source
+availability does not make a CI artifact or an application binary a supported
+release. Any supported binary versions must be identified separately in a
+published release; none is announced here.
 
 ## Report a vulnerability privately
 
