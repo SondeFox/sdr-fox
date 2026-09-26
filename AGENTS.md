@@ -1,6 +1,6 @@
 # Agent instructions
 
-This repository is the clean, private-incubation home of sdr-fox.
+This repository is the clean-history public source home of sdr-fox.
 
 ## Before changing code
 
