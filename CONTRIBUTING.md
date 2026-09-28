@@ -14,13 +14,15 @@ An accountable covered human must review and sponsor AI or bot submissions.
 A protected check must bind clearance to the current PR head and authors;
 historical contributions need separate review. Agreements and identity records
 stay private, never in a PR. No draft agreement is offered for signature by
-this notice. See the [source-readiness gate](docs/REPOSITORY_CONTEXT.md#public-release-gate).
+this notice. See the
+[public-source status and release gates](docs/REPOSITORY_CONTEXT.md#public-source-status-and-release-gates).
 
 ## Start here
 
 Read `AGENTS.md`, `docs/REPOSITORY_CONTEXT.md`, `docs/UPSTREAMS.md`, and the
-relevant architecture or integration document. Discuss large API, transport,
-or licensing changes before implementation.
+relevant architecture or integration document. If you use an LLM, follow
+[`docs/AI.md`](docs/AI.md). Discuss large API, transport, or licensing changes
+before implementation.
 
 Create a focused branch from `master`; do not use a `codex/` branch name. Keep
 commits reviewable and do not merge or graft history from the restricted
@@ -38,7 +40,8 @@ A pull request should:
 - list affected platforms, receivers, language bindings, and safety contracts;
 - identify every technical reference or new dependency with URL and license;
 - include tests that do not require hardware where possible;
-- state any hardware validation separately without attaching raw captures; and
+- state any hardware validation separately without attaching raw captures;
+- disclose material AI assistance and how its output was checked; and
 - update integration, security, provenance, or notice documentation when the
   corresponding contract changes.
 

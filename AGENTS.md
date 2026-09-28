@@ -4,8 +4,8 @@ This repository is the clean-history public source home of sdr-fox.
 
 ## Before changing code
 
-1. Read `README.md`, `docs/REPOSITORY_CONTEXT.md`, `docs/UPSTREAMS.md`, and the
-   relevant architecture or integration document.
+1. Read `README.md`, `docs/REPOSITORY_CONTEXT.md`, `docs/UPSTREAMS.md`,
+   `docs/AI.md`, and the relevant architecture or integration document.
 2. Treat this repository's `master` branch as the only source-history base.
    Never fetch, merge, rebase, cherry-pick, or graft commits, tags, PR refs, or
    patches from the restricted legacy repository.
@@ -17,6 +17,10 @@ This repository is the clean-history public source home of sdr-fox.
 
 - Use parallel background agents for major work, followed by a separate
   integration pass. Do not use `codex/` in branch names.
+- Use `docs/ARCHITECTURE.md` to locate the owning crate and
+  `docs/INTEGRATION.md` to trace consumer-facing contracts before editing an
+  API. Treat generated explanations as hypotheses until code and tests verify
+  them.
 - Keep unsafe code confined to the reviewed FFI/USB boundary and document each
   safety contract.
 - Keep Android free of `rusb`, `libusb1-sys`, and linked libusb code. Android
