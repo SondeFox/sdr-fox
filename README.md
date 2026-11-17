@@ -3,10 +3,10 @@
 One radio API for RTL-SDR and Airspy receivers, written in Rust with C,
 Python, Android JNI, and command-line interfaces.
 
-> **Private incubation:** the implementation is active and its APIs may still
-> change. Public release is gated on provenance, security, packaging, and
-> hardware review. Do not publish this repository or graft its legacy Git
-> history into this clean snapshot.
+> **Public source:** the APIs may still change. The source is available under
+> MIT OR Apache-2.0; no supported binary release or general hardware
+> qualification is announced. Never graft the restricted legacy Git history
+> into this clean repository.
 
 ## What is here
 
@@ -96,16 +96,20 @@ rewritten, renamed, or removed and the notices were corrected. The concise
 record is in [`PROVENANCE-AUDIT.md`](PROVENANCE-AUDIT.md), with upstream roles
 in [`docs/UPSTREAMS.md`](docs/UPSTREAMS.md).
 
-The audit is engineering evidence, not legal advice. Public release remains a
-deliberate review gate, and legacy commits, tags, pull-request refs, and audit
-evidence must stay in the restricted archive.
+The audit is engineering evidence, not legal advice. The
+[public-source status](docs/REPOSITORY_CONTEXT.md#public-source-status-and-release-gates)
+records the bounded review that preceded visibility and the separate binary
+release gates. Legacy commits, tags, pull-request refs, and audit evidence stay
+in the restricted archive.
 
 ## Security and contributing
 
 Please read [`SECURITY.md`](SECURITY.md) before reporting a vulnerability and
-[`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing a change. Do not include
-captures containing location data, device identifiers, credentials, or other
-private field data in issues, fixtures, or commits.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing a change. LLMs have been
+used extensively in this project; [`docs/AI.md`](docs/AI.md) explains that use
+and how to contribute with AI assistance. Do not include captures containing
+location data, device identifiers, credentials, or other private field data in
+issues, fixtures, or commits.
 
 ## License
 
@@ -114,8 +118,9 @@ see [`LICENSE-MIT`](LICENSE-MIT) and
 [`LICENSE-APACHE`](LICENSE-APACHE). Third-party acknowledgements and desktop
 libusb distribution notes are in [`NOTICE`](NOTICE).
 
-Repository access is private during incubation. Making the project public is
-a separate approval, not an implication of the license files being present.
+The license files state the current source terms. They do not qualify a
+GitHub artifact or signed application release, or open external code intake.
+See the [contribution status](CONTRIBUTING.md) before submitting code.
 
 ## macOS direct USB update (2026-09-06)
 

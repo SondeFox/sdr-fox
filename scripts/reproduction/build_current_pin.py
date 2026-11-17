@@ -22,10 +22,14 @@ import sys
 import tempfile
 import time
 
-SOURCE_COMMIT = "fb34d8c600725b54c5a950234c892a593c343968"
-SOURCE_TREE = "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
-SOURCE_ROOT = "7bcb45cd2a993240abe7f41dcaeec4a84bc04aeb"
-LOCK_SHA256 = "62ab5b79776c322f9776c8c41f8a6707fac6dfcf6a49b791fcb30e10999b4f76"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from profiles import HISTORICAL, LOCK_SHA256, PROFILES, SOURCE_ROOT, build_override_args, load_manifest, select_profile
+from page_layout import check_link_args
+from candidate_authority import verify_candidate_authority
+
+# Retain the historical API/default while profiles hold subject identities.
+SOURCE_COMMIT = HISTORICAL.source_commit
+SOURCE_TREE = HISTORICAL.source_tree
 ORIGINS = {"https://github.com/SondeFox/sdr-fox", "https://github.com/SondeFox/sdr-fox.git"}
 RUST_TOOLCHAIN = "1.95.0-aarch64-apple-darwin"
 RUSTC_VERSION = "rustc 1.95.0 (59807616e 2026-04-14)"
@@ -69,7 +73,7 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def guard_host(env: dict[str, str]) -> None:
+def guard_host(env: dict[str, str], profile=HISTORICAL):
     expected = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
                 "RUNNER_OS": "macOS", "RUNNER_ARCH": "ARM64",
                 "GITHUB_REPOSITORY": "SondeFox/sdr-fox", "GITHUB_REF": "refs/heads/master",
@@ -85,6 +89,10 @@ def guard_host(env: dict[str, str]) -> None:
     for key in env:
         require(key not in overrides and not key.startswith(("GIT_CONFIG", "CARGO_TARGET_", "CARGO_BUILD_", "DYLD_")),
                 f"Unexpected build override: {key}")
+    if profile != HISTORICAL:
+        require(profile in PROFILES, "Unreviewed reconstruction profile")
+        return verify_candidate_authority(env)
+    return None
 
 
 def remap_flags(source: Path, home: Path) -> str:
@@ -93,14 +101,14 @@ def remap_flags(source: Path, home: Path) -> str:
             f"--remap-path-prefix={home}=/home/builder")
 
 
-def guard_source(source: Path, query) -> None:
+def guard_source(source: Path, query, profile=HISTORICAL) -> None:
     require(query(["git", "remote"]).splitlines() == ["origin"], "Only canonical origin is allowed")
     for args in (["git", "remote", "get-url", "--all", "origin"],
                  ["git", "remote", "get-url", "--push", "--all", "origin"]):
         urls = query(args).splitlines()
         require(len(urls) == 1 and urls[0] in ORIGINS, "Unexpected source origin")
-    require(query(["git", "rev-parse", "HEAD"]).strip() == SOURCE_COMMIT, "Source commit mismatch")
-    require(query(["git", "rev-parse", "HEAD^{tree}"]).strip() == SOURCE_TREE, "Source tree mismatch")
+    require(query(["git", "rev-parse", "HEAD"]).strip() == profile.source_commit, "Source commit mismatch")
+    require(query(["git", "rev-parse", "HEAD^{tree}"]).strip() == profile.source_tree, "Source tree mismatch")
     require(query(["git", "rev-list", "--max-parents=0", "HEAD"]).splitlines() == [SOURCE_ROOT], "Source root mismatch")
     require(not query(["git", "status", "--porcelain", "--untracked-files=all"]).strip(), "Source checkout is not clean")
     require(sha256(source / "Cargo.lock") == LOCK_SHA256, "Cargo.lock mismatch")
@@ -243,14 +251,21 @@ def parse_android_clang(log, target, ndk):
 
 
 class Builder:
-    def __init__(self, source: Path, evidence: Path, env: dict[str, str]):
+    def __init__(self, source: Path, evidence: Path, env: dict[str, str], profile=HISTORICAL):
+        require(profile in PROFILES, "Unreviewed reconstruction profile")
+        self.profile = profile
+        self.manifest = load_manifest(profile) if profile != HISTORICAL else None
         self.source, self.evidence = source, evidence
         self.original_env = env
         self.deadline = time.monotonic() + BUILD_SECONDS
-        self.receipt = {"schema": 1, "status": "running", "source_commit": SOURCE_COMMIT,
-                        "source_tree": SOURCE_TREE, "source_root": SOURCE_ROOT,
+        self.receipt = {"schema": 1, "status": "running", "source_commit": profile.source_commit,
+                        "source_tree": profile.source_tree, "source_root": SOURCE_ROOT,
                         "lock_sha256": LOCK_SHA256, "commands": [], "artifacts": [],
                         "scope": "One hosted reconstruction attempt; acceptance belongs to independent verifier"}
+        if self.manifest:
+            self.receipt.update(reconstruction_profile=profile.name, expected_manifest_sha256=self.manifest.sha256)
+        if profile.cargo_build_override:
+            self.receipt["cargo_build_override"] = profile.cargo_build_override
         self.evidence.mkdir(parents=False, exist_ok=False)
         (self.evidence / "logs").mkdir()
         self.env = {key: env[key] for key in ("HOME", "PATH", "TMPDIR", "DEVELOPER_DIR", "ANDROID_SDK_ROOT") if key in env}
@@ -383,6 +398,8 @@ class Builder:
         source = scratch / "android-driver.c"
         source.write_text(ANDROID_PROBE_SOURCE)
         for row in observations:
+            if self.profile.android_link_args:
+                row["page_link_args"] = check_link_args(row["rustc_argv"], self.profile.android_link_args)
             target = row["rust_target"]
             label = "android-clang-" + target
             output = self.command(label, [row["clang_path"], row["clang_target"], "-###", "-shared", "-fPIC", "-x", "c",
@@ -406,38 +423,56 @@ class Builder:
             "--all-features", "--format-version", "1", "--manifest-path",
             str(self.source / "crates/sdr-fox-cabi/Cargo.toml")])
 
-    def build_android(self, rust_bin):
+    def verified_compiler(self, rust_bin, platform_name):
+        require(platform_name in ("android", "macos"), "Unexpected compiler evidence role")
+        role = "Android" if platform_name == "android" else "Mac"
         # Cargo otherwise prints a bare `rustc` even when our PATH selects the
         # correct toolchain. Bind the already installed, inventoried compiler
         # explicitly in this child only; neither parser may infer PATH identity.
         compiler = rust_bin / "rustc"
         rustup_home = Path(self.env["RUSTUP_HOME"])
         expected = rustup_home / "toolchains" / RUST_TOOLCHAIN / "bin/rustc"
-        require(compiler.is_absolute() and compiler == expected and compiler.is_file(), "Missing pinned Android compiler")
+        require(compiler.is_absolute() and compiler == expected and compiler.is_file(), f"Missing pinned {role} compiler")
         require("RUSTC" not in self.env, "Unexpected parent compiler override")
         inventory = json.loads((self.evidence / "rust-toolchain-inventory.json").read_text())
         matches = [item for item in inventory if item.get("path") == str(compiler.relative_to(rustup_home))]
         compiler_sha256 = sha256(compiler)
-        require(len(matches) == 1 and matches[0].get("sha256") == compiler_sha256, "Pinned Android compiler inventory mismatch")
-        version = self.command("android-rustc-version", [str(compiler), "--version"], query=True).strip()
-        require(version == RUSTC_VERSION, "Unexpected pinned Android compiler version")
-        self.receipt["android_compiler"] = {"path": self.sanitized(str(compiler)), "sha256": compiler_sha256,
-            "version": version, "version_log": self.log_reference("android-rustc-version")}
+        require(len(matches) == 1 and matches[0].get("sha256") == compiler_sha256, f"Pinned {role} compiler inventory mismatch")
+        label = platform_name + "-rustc-version"
+        version = self.command(label, [str(compiler), "--version"], query=True).strip()
+        require(version == RUSTC_VERSION, f"Unexpected pinned {role} compiler version")
+        self.receipt[platform_name + "_compiler"] = {"path": self.sanitized(str(compiler)), "sha256": compiler_sha256,
+            "version": version, "version_log": self.log_reference(label)}
         self.save_receipt()
+        return compiler
+
+    def build_macos(self, rust_bin):
+        args = ["cargo", "build", *build_override_args(self.profile)]
+        child_env = self.env | {"MACOSX_DEPLOYMENT_TARGET": "14.0"}
+        if self.profile.cargo_build_override:
+            args += ["-vv"]
+            child_env["RUSTC"] = str(self.verified_compiler(rust_bin, "macos"))
+        args += ["--locked", "--offline", "--release", "--target", TARGETS[0], "-p", "sdr-fox-cabi"]
+        return self.command("build-macos", args, env=child_env, query=bool(self.profile.cargo_build_override))
+
+    def build_android(self, rust_bin):
+        compiler = self.verified_compiler(rust_bin, "android")
         child_env = self.env | {"RUSTC": str(compiler)}
-        return self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], env=child_env, query=True)
+        return self.command("build-android", ["cargo", "ndk", "--platform", "21", "-t", "arm64-v8a", "-t", "x86_64", "build", *build_override_args(self.profile), "-vv", "--color", "never", "--locked", "--offline", "--release", "-p", "sdr-fox-jni", "--features", "android"], env=child_env, query=True)
 
     def run(self) -> None:
         env = self.original_env
-        guard_host(env)
+        authority = guard_host(env, self.profile)
+        if authority is not None:
+            self.receipt["authority"] = authority
         runner_temp = Path(env["RUNNER_TEMP"]).resolve()
         home = Path(env["HOME"]).resolve()
         require(self.source == Path(env["GITHUB_WORKSPACE"]).resolve() / "fixed-source", "Unexpected source checkout path")
         require(self.evidence == runner_temp / "sondefox-reproduction", "Unexpected evidence output path")
-        require(self.env.get("DEVELOPER_DIR") == "/Applications/Xcode_26.6.app/Contents/Developer", "Unexpected Xcode selection")
-        require(Path(self.env["DEVELOPER_DIR"]).is_dir(), "Required Xcode 26.6 is unavailable")
+        require(self.env.get("DEVELOPER_DIR") == self.profile.developer_directory, "Unexpected Xcode selection")
+        require(Path(self.env["DEVELOPER_DIR"]).is_dir(), "Required Xcode is unavailable")
         self.receipt["runner"] = {key: env.get(key) for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "RUNNER_OS", "RUNNER_ARCH", "RUNNER_ENVIRONMENT", "ImageOS", "ImageVersion")}
-        guard_source(self.source, lambda args: self.command("source-check", args, query=True))
+        guard_source(self.source, lambda args: self.command("source-check", args, query=True), self.profile)
         scratch = runner_temp / "sondefox-reproduction-scratch"
         scratch.mkdir(exist_ok=False)
         rustup_home = runner_temp / "sondefox-reproduction-rustup"
@@ -452,14 +487,16 @@ class Builder:
                             ("sdk", ["xcrun", "--sdk", "macosx", "--show-sdk-version"]),
                             ("rustup", ["rustup", "--version"]),
                             ("python", [sys.executable, "--version"])):
-            self.command(label, args)
+            observed = self.command(label, args, query=label == "xcode" and self.profile.xcode_identity is not None)
+            if label == "xcode" and self.profile.xcode_identity is not None:
+                require(observed.strip() == self.profile.xcode_identity, "Candidate Xcode version/build mismatch")
         apple_tools = self.observe_apple_tools()
         self.receipt["bootstrap_executables"] = {
             tool: sha256(Path(shutil.which(tool, path=self.env["PATH"])))
             for tool in ("rustup", "python3")
         }
         source_archive = scratch / "source.tar"
-        self.command("source-archive", ["git", "archive", "--format=tar", "--output", str(source_archive), SOURCE_COMMIT])
+        self.command("source-archive", ["git", "archive", "--format=tar", "--output", str(source_archive), self.profile.source_commit])
         self.receipt["source_archive_sha256"] = sha256(source_archive)
         self.command("install-rust", ["rustup", "toolchain", "install", "1.95.0", "--profile", "minimal",
                                       "--no-self-update", "--target", ",".join(TARGETS)])
@@ -513,9 +550,7 @@ class Builder:
         before = header.read_bytes()
         self.receipt["header_regeneration"] = {"removed_before_build": True, "original_sha256": hashlib.sha256(before).hexdigest()}
         self.save_receipt()
-        build_regenerating_header(header, lambda: self.command(
-            "build-macos", ["cargo", "build", "--locked", "--offline", "--release", "--target", TARGETS[0], "-p", "sdr-fox-cabi"],
-            env=self.env | {"MACOSX_DEPLOYMENT_TARGET": "14.0"}))
+        build_regenerating_header(header, lambda: self.build_macos(rust_bin))
         self.receipt["header_regeneration"]["regenerated_exactly"] = True
         self.copy_artifact(self.source / "target" / TARGETS[0] / "release" / "libsdr_fox.a", "libsdr_fox_ffi.a")
         self.copy_artifact(header, "sdr_fox.h")
@@ -533,11 +568,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--profile", choices=[profile.name for profile in PROFILES], default=HISTORICAL.name)
     args = parser.parse_args()
     builder = None
     try:
-        guard_host(dict(os.environ))  # Never quarantine local developer caches.
-        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ))
+        profile = select_profile(args.profile)
+        guard_host(dict(os.environ), profile)  # Owner check precedes Builder/evidence creation.
+        builder = Builder(args.source_dir.resolve(), args.evidence_dir.resolve(), dict(os.environ), profile)
         builder.run()
         return 0
     except Exception as exc:

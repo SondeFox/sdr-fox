@@ -140,3 +140,10 @@ and Cargo interface facts linked in [ANDROID_PAGE_SIZE.md](ANDROID_PAGE_SIZE.md)
 No provider implementation, dependency, fixture or binary is imported. The
 existing NDK/Rust/cargo-ndk pins and their tool/runtime license boundaries remain
 as recorded above; the historical fixed-pin reproduction contract is preserved.
+
+The separately named candidate workflow deliberately selects Xcode 27.0/build
+27A266a on the standard ARM `xcode-27` image. Its versioned alias, official
+image reference and receipt boundaries are in `ANDROID_PAGE_SIZE.md`.
+Only tool/interface facts are used; no Apple or Google SDK is redistributed
+by this workflow. Its source, hashes and profile do not replace the historical
+Xcode 26.6 reconstruction subject.

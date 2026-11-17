@@ -137,3 +137,18 @@ third-party fixture, native artifact or radio capture is added. Google Android
 and Cargo documentation supply linker/interface facts only, as linked in
 `docs/ANDROID_PAGE_SIZE.md`. Immutable versions are the containing Git commits
 and blobs. No dependency or source-license change is introduced.
+
+The candidate reconstruction profiles, manifest plumbing, ELF/link-argument
+checks and synthetic regressions are first-party MIT OR Apache-2.0 tooling.
+They reuse this canonical repository's existing builder/verifier and contain
+no copied provider implementation or external executable fixture. The new
+manifest records inspected local source2d outputs for a later independent
+fresh-host comparison; it is not a public-release or hardware acceptance.
+Historical fb34d8c identities and receipts remain separate and unchanged.
+
+The distinct host-safe profile adds the official Cargo build-dependency strip
+override as a recorded build input while preserving runtime source 2d. Its new
+five-output manifest describes actual new bytes; it does not replace the
+original candidate manifest or failed hosted evidence. The command/log checker
+and synthetic tests are independently authored first-party tooling; no issue
+reporter's implementation was copied. See `docs/ANDROID_PAGE_SIZE.md`.

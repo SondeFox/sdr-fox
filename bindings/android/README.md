@@ -17,7 +17,9 @@ export CARGO_CACHE_ROOT="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=${SDR_FOX_SOURCE_ROOT}=/workspace/sdr-fox \
 --remap-path-prefix=${CARGO_CACHE_ROOT}=/cargo \
 --remap-path-prefix=${HOME}=/home/builder"
-cargo +1.95.0 ndk --platform 21 -t arm64-v8a -t x86_64 build --locked --release -p sdr-fox-jni --features android
+cargo +1.95.0 ndk --platform 21 -t arm64-v8a -t x86_64 build \
+  --config 'profile.release.build-override.strip="none"' \
+  --locked --release -p sdr-fox-jni --features android
 ```
 
 This produces `target/<triple>/release/libsdr_fox_jni.so` for each ABI.
@@ -31,6 +33,14 @@ the JNI cdylib link; do not replace these with a host-wide linker override.
 Inspect both actual libraries' LOAD and GNU_RELRO layout and the final APK;
 see [the page-size contract](../../docs/ANDROID_PAGE_SIZE.md). Local build
 success alone does not establish device compatibility or release approval.
+
+The explicit build override is part of the current host-safe recipe for
+macOS 27: it leaves compile-time host dependencies unstripped while runtime
+JNI targets retain the source's release stripping. Plain `cargo --release`
+does not apply this override and was not qualified by this recipe. The
+historical fixed-source reconstruction profiles retain their original commands;
+use the separate host-safe profile/manifest for exact comparison. See the
+[host build policy](../../docs/ANDROID_PAGE_SIZE.md#host-build-stripping).
 
 ### How Android opens a USB device
 

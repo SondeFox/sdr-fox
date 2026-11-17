@@ -1,0 +1,2586 @@
+{
+  "abi": {
+    "c": {
+      "declaration_method": "Remove C block/line comments; parse sdrfox_* function prototypes ending semicolon; compare defined Mach-O exports",
+      "declaration_path": "bindings/sdr_fox.h",
+      "declaration_sha256": "2c18ed15e9f955253983585389683d5f6a85d3f98a754245b8b5d7cd6a7dfddc",
+      "function_count": 27,
+      "functions": [
+        "sdrfox_close",
+        "sdrfox_close_stream",
+        "sdrfox_disable_upconverter",
+        "sdrfox_enable_spyverter",
+        "sdrfox_enumerate",
+        "sdrfox_gain_steps",
+        "sdrfox_last_error",
+        "sdrfox_open_id",
+        "sdrfox_open_index",
+        "sdrfox_read_stream",
+        "sdrfox_reference_clock",
+        "sdrfox_sample_rates",
+        "sdrfox_set_agc",
+        "sdrfox_set_bandwidth",
+        "sdrfox_set_bias_tee",
+        "sdrfox_set_freq_correction",
+        "sdrfox_set_frequency",
+        "sdrfox_set_gain",
+        "sdrfox_set_gain_mode",
+        "sdrfox_set_sample_rate",
+        "sdrfox_set_sample_rate_actual",
+        "sdrfox_set_stage_agc",
+        "sdrfox_set_stage_gain",
+        "sdrfox_start_stream",
+        "sdrfox_stop_stream",
+        "sdrfox_stream_stats",
+        "sdrfox_version"
+      ],
+      "macos_archive": {
+        "architecture": "arm64",
+        "archive_magic_hex": "213c617263683e0a",
+        "c_abi_defined_exports": [
+          "_sdrfox_close",
+          "_sdrfox_close_stream",
+          "_sdrfox_disable_upconverter",
+          "_sdrfox_enable_spyverter",
+          "_sdrfox_enumerate",
+          "_sdrfox_gain_steps",
+          "_sdrfox_last_error",
+          "_sdrfox_open_id",
+          "_sdrfox_open_index",
+          "_sdrfox_read_stream",
+          "_sdrfox_reference_clock",
+          "_sdrfox_sample_rates",
+          "_sdrfox_set_agc",
+          "_sdrfox_set_bandwidth",
+          "_sdrfox_set_bias_tee",
+          "_sdrfox_set_freq_correction",
+          "_sdrfox_set_frequency",
+          "_sdrfox_set_gain",
+          "_sdrfox_set_gain_mode",
+          "_sdrfox_set_sample_rate",
+          "_sdrfox_set_sample_rate_actual",
+          "_sdrfox_set_stage_agc",
+          "_sdrfox_set_stage_gain",
+          "_sdrfox_start_stream",
+          "_sdrfox_stop_stream",
+          "_sdrfox_stream_stats",
+          "_sdrfox_version"
+        ],
+        "c_abi_symbol_prefix": "_",
+        "container": "ar",
+        "macho_cpu_type": 16777228,
+        "member_format": "Mach-O",
+        "minimum_versions": {
+          "11.0": 384,
+          "14.0": 30
+        },
+        "observed_macho_member_count": 414,
+        "platform": 1
+      }
+    },
+    "elf_contracts": [
+      {
+        "android_abi": "arm64-v8a",
+        "artifact_role": "android_arm64_jni",
+        "class": "ELF64",
+        "defined_dynamic_exports": [
+          "Java_com_sdrfox_SdrFox_nativeClose",
+          "Java_com_sdrfox_SdrFox_nativeCloseStream",
+          "Java_com_sdrfox_SdrFox_nativeGetSampleRates",
+          "Java_com_sdrfox_SdrFox_nativeOpenByFd",
+          "Java_com_sdrfox_SdrFox_nativeOpenByFdWithIdentity",
+          "Java_com_sdrfox_SdrFox_nativeReadStream",
+          "Java_com_sdrfox_SdrFox_nativeSetAgc",
+          "Java_com_sdrfox_SdrFox_nativeSetBandwidth",
+          "Java_com_sdrfox_SdrFox_nativeSetBiasTee",
+          "Java_com_sdrfox_SdrFox_nativeSetFrequency",
+          "Java_com_sdrfox_SdrFox_nativeSetGain",
+          "Java_com_sdrfox_SdrFox_nativeSetGainMode",
+          "Java_com_sdrfox_SdrFox_nativeSetGainStage",
+          "Java_com_sdrfox_SdrFox_nativeSetSampleRate",
+          "Java_com_sdrfox_SdrFox_nativeSetStageAgc",
+          "Java_com_sdrfox_SdrFox_nativeStartStream",
+          "Java_com_sdrfox_SdrFox_nativeStopStream",
+          "Java_com_sdrfox_SdrFox_nativeStreamStats"
+        ],
+        "e_machine": 183,
+        "e_type": 3,
+        "elf_class": 2,
+        "elf_data": 1,
+        "endianness": "little",
+        "forbidden_byte_strings_case_insensitive": [
+          "libusb"
+        ],
+        "machine_description": "AArch64",
+        "needed": [
+          "libc.so",
+          "libdl.so",
+          "liblog.so",
+          "libm.so"
+        ],
+        "target": "aarch64-linux-android",
+        "type": "ET_DYN"
+      },
+      {
+        "android_abi": "x86_64",
+        "artifact_role": "android_x86_64_jni",
+        "class": "ELF64",
+        "defined_dynamic_exports": [
+          "Java_com_sdrfox_SdrFox_nativeClose",
+          "Java_com_sdrfox_SdrFox_nativeCloseStream",
+          "Java_com_sdrfox_SdrFox_nativeGetSampleRates",
+          "Java_com_sdrfox_SdrFox_nativeOpenByFd",
+          "Java_com_sdrfox_SdrFox_nativeOpenByFdWithIdentity",
+          "Java_com_sdrfox_SdrFox_nativeReadStream",
+          "Java_com_sdrfox_SdrFox_nativeSetAgc",
+          "Java_com_sdrfox_SdrFox_nativeSetBandwidth",
+          "Java_com_sdrfox_SdrFox_nativeSetBiasTee",
+          "Java_com_sdrfox_SdrFox_nativeSetFrequency",
+          "Java_com_sdrfox_SdrFox_nativeSetGain",
+          "Java_com_sdrfox_SdrFox_nativeSetGainMode",
+          "Java_com_sdrfox_SdrFox_nativeSetGainStage",
+          "Java_com_sdrfox_SdrFox_nativeSetSampleRate",
+          "Java_com_sdrfox_SdrFox_nativeSetStageAgc",
+          "Java_com_sdrfox_SdrFox_nativeStartStream",
+          "Java_com_sdrfox_SdrFox_nativeStopStream",
+          "Java_com_sdrfox_SdrFox_nativeStreamStats"
+        ],
+        "e_machine": 62,
+        "e_type": 3,
+        "elf_class": 2,
+        "elf_data": 1,
+        "endianness": "little",
+        "forbidden_byte_strings_case_insensitive": [
+          "libusb"
+        ],
+        "machine_description": "Advanced Micro Devices X86-64",
+        "needed": [
+          "libc.so",
+          "libdl.so",
+          "liblog.so",
+          "libm.so"
+        ],
+        "target": "x86_64-linux-android",
+        "type": "ET_DYN"
+      }
+    ],
+    "jni": {
+      "class": "SdrFox",
+      "declaration_method": "external fun names; JNI prefix Java_com_sdrfox_SdrFox_; no overloaded or underscore-escaped method names",
+      "declaration_path": "bindings/android/SdrFox.kt",
+      "declaration_sha256": "ebfa0ef5da042d59ceccb0903401a6e38f5df0c95ae911a1748be82622de73b6",
+      "method_count": 18,
+      "methods": [
+        "nativeClose",
+        "nativeCloseStream",
+        "nativeGetSampleRates",
+        "nativeOpenByFd",
+        "nativeOpenByFdWithIdentity",
+        "nativeReadStream",
+        "nativeSetAgc",
+        "nativeSetBandwidth",
+        "nativeSetBiasTee",
+        "nativeSetFrequency",
+        "nativeSetGain",
+        "nativeSetGainMode",
+        "nativeSetGainStage",
+        "nativeSetSampleRate",
+        "nativeSetStageAgc",
+        "nativeStartStream",
+        "nativeStopStream",
+        "nativeStreamStats"
+      ],
+      "package": "com.sdrfox",
+      "symbols": [
+        "Java_com_sdrfox_SdrFox_nativeClose",
+        "Java_com_sdrfox_SdrFox_nativeCloseStream",
+        "Java_com_sdrfox_SdrFox_nativeGetSampleRates",
+        "Java_com_sdrfox_SdrFox_nativeOpenByFd",
+        "Java_com_sdrfox_SdrFox_nativeOpenByFdWithIdentity",
+        "Java_com_sdrfox_SdrFox_nativeReadStream",
+        "Java_com_sdrfox_SdrFox_nativeSetAgc",
+        "Java_com_sdrfox_SdrFox_nativeSetBandwidth",
+        "Java_com_sdrfox_SdrFox_nativeSetBiasTee",
+        "Java_com_sdrfox_SdrFox_nativeSetFrequency",
+        "Java_com_sdrfox_SdrFox_nativeSetGain",
+        "Java_com_sdrfox_SdrFox_nativeSetGainMode",
+        "Java_com_sdrfox_SdrFox_nativeSetGainStage",
+        "Java_com_sdrfox_SdrFox_nativeSetSampleRate",
+        "Java_com_sdrfox_SdrFox_nativeSetStageAgc",
+        "Java_com_sdrfox_SdrFox_nativeStartStream",
+        "Java_com_sdrfox_SdrFox_nativeStopStream",
+        "Java_com_sdrfox_SdrFox_nativeStreamStats"
+      ]
+    }
+  },
+  "android_link_args": [
+    "-Wl,-z,max-page-size=16384",
+    "-Wl,-z,common-page-size=16384"
+  ],
+  "artifacts": [
+    {
+      "path": "libsdr_fox_ffi.a",
+      "role": "macos_archive",
+      "sha256": "72f6ea12d2dda33139e6e01962a4d3628a326b5c15cadd840c7f9356ee7acc6f",
+      "size_bytes": 22955288,
+      "upstream_output_path": "target/aarch64-apple-darwin/release/libsdr_fox.a"
+    },
+    {
+      "path": "sdr_fox.h",
+      "role": "c_header",
+      "sha256": "2c18ed15e9f955253983585389683d5f6a85d3f98a754245b8b5d7cd6a7dfddc",
+      "size_bytes": 11502,
+      "upstream_output_path": "bindings/sdr_fox.h"
+    },
+    {
+      "path": "SdrFox.kt",
+      "role": "kotlin_binding",
+      "sha256": "ebfa0ef5da042d59ceccb0903401a6e38f5df0c95ae911a1748be82622de73b6",
+      "size_bytes": 24263,
+      "upstream_output_path": "bindings/android/SdrFox.kt"
+    },
+    {
+      "path": "arm64-v8a/libsdr_fox_jni.so",
+      "role": "android_arm64_jni",
+      "sha256": "34225fc0d5594cb87e8b79c0c581b10f55c9d7ac3e3693772fce24e53717d32c",
+      "size_bytes": 879736,
+      "upstream_output_path": "target/aarch64-linux-android/release/libsdr_fox_jni.so"
+    },
+    {
+      "path": "x86_64/libsdr_fox_jni.so",
+      "role": "android_x86_64_jni",
+      "sha256": "df90ad49009692e872c58e3987c3cf41c5d48273849c1e134f53881020977fa0",
+      "size_bytes": 968272,
+      "upstream_output_path": "target/x86_64-linux-android/release/libsdr_fox_jni.so"
+    }
+  ],
+  "build_evidence": {
+    "android_probe_source_sha256": "2ad75d95660563887d8d3f1d0ae1dcf18c2379cbd83a5c72f5ab276351ee6949",
+    "c_smoke_source_sha256": "4c6300c5b9cc8d8f779e2f024349c7f67b22973f09f9411491f2bfbfc925539a",
+    "c_version": "0.1.0"
+  },
+  "package_graphs": [
+    {
+      "edges": [
+        "normal",
+        "build"
+      ],
+      "features": [],
+      "package_count": 73,
+      "packages": [
+        {
+          "cargo_checksum": "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "anstream",
+          "source": {
+            "archive_sha256": "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d",
+            "archive_url": "https://crates.io/api/v1/crates/anstream/1.0.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.0"
+        },
+        {
+          "cargo_checksum": "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "anstyle",
+          "source": {
+            "archive_sha256": "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000",
+            "archive_url": "https://crates.io/api/v1/crates/anstyle/1.0.14/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.14"
+        },
+        {
+          "cargo_checksum": "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "anstyle-parse",
+          "source": {
+            "archive_sha256": "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e",
+            "archive_url": "https://crates.io/api/v1/crates/anstyle-parse/1.0.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.0"
+        },
+        {
+          "cargo_checksum": "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "anstyle-query",
+          "source": {
+            "archive_sha256": "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc",
+            "archive_url": "https://crates.io/api/v1/crates/anstyle-query/1.1.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.5"
+        },
+        {
+          "cargo_checksum": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "autocfg",
+          "source": {
+            "archive_sha256": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+            "archive_url": "https://crates.io/api/v1/crates/autocfg/1.5.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.5.1"
+        },
+        {
+          "cargo_checksum": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "bitflags",
+          "source": {
+            "archive_sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+            "archive_url": "https://crates.io/api/v1/crates/bitflags/2.13.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.13.1"
+        },
+        {
+          "cargo_checksum": "2ecb53484c9c167ba674026b656d8a27d7657a58e6066aa902bfb1a4aa00ae20",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "cbindgen",
+          "source": {
+            "archive_sha256": "2ecb53484c9c167ba674026b656d8a27d7657a58e6066aa902bfb1a4aa00ae20",
+            "archive_url": "https://crates.io/api/v1/crates/cbindgen/0.29.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.29.4"
+        },
+        {
+          "cargo_checksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "cfg-if",
+          "source": {
+            "archive_sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+            "archive_url": "https://crates.io/api/v1/crates/cfg-if/1.0.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.4"
+        },
+        {
+          "cargo_checksum": "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "clap",
+          "source": {
+            "archive_sha256": "301b56658598e48f3648647ac6fc887be7e7108eddfa4e9b63fcf3ec58c0cadf",
+            "archive_url": "https://crates.io/api/v1/crates/clap/4.6.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "4.6.5"
+        },
+        {
+          "cargo_checksum": "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "clap_builder",
+          "source": {
+            "archive_sha256": "94a65403d1a1bd28f7dc68eb8506e8874808ee5eecb59298de588e2e1407a078",
+            "archive_url": "https://crates.io/api/v1/crates/clap_builder/4.6.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "4.6.5"
+        },
+        {
+          "cargo_checksum": "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "clap_lex",
+          "source": {
+            "archive_sha256": "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9",
+            "archive_url": "https://crates.io/api/v1/crates/clap_lex/1.1.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.0"
+        },
+        {
+          "cargo_checksum": "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "colorchoice",
+          "source": {
+            "archive_sha256": "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570",
+            "archive_url": "https://crates.io/api/v1/crates/colorchoice/1.0.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.5"
+        },
+        {
+          "cargo_checksum": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "core-foundation",
+          "source": {
+            "archive_sha256": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
+            "archive_url": "https://crates.io/api/v1/crates/core-foundation/0.10.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.10.1"
+        },
+        {
+          "cargo_checksum": "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "core-foundation-sys",
+          "source": {
+            "archive_sha256": "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b",
+            "archive_url": "https://crates.io/api/v1/crates/core-foundation-sys/0.8.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.8.7"
+        },
+        {
+          "cargo_checksum": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-channel",
+          "source": {
+            "archive_sha256": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-channel/0.5.16/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.16"
+        },
+        {
+          "cargo_checksum": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-utils",
+          "source": {
+            "archive_sha256": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.8.22"
+        },
+        {
+          "cargo_checksum": "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "equivalent",
+          "source": {
+            "archive_sha256": "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f",
+            "archive_url": "https://crates.io/api/v1/crates/equivalent/1.0.2/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.2"
+        },
+        {
+          "cargo_checksum": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "errno",
+          "source": {
+            "archive_sha256": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+            "archive_url": "https://crates.io/api/v1/crates/errno/0.3.14/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.14"
+        },
+        {
+          "cargo_checksum": "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "fastrand",
+          "source": {
+            "archive_sha256": "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223",
+            "archive_url": "https://crates.io/api/v1/crates/fastrand/2.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.5.0"
+        },
+        {
+          "cargo_checksum": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "futures-core",
+          "source": {
+            "archive_sha256": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+            "archive_url": "https://crates.io/api/v1/crates/futures-core/0.3.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.33"
+        },
+        {
+          "cargo_checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "getrandom",
+          "source": {
+            "archive_sha256": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+            "archive_url": "https://crates.io/api/v1/crates/getrandom/0.4.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.3"
+        },
+        {
+          "cargo_checksum": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "hashbrown",
+          "source": {
+            "archive_sha256": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+            "archive_url": "https://crates.io/api/v1/crates/hashbrown/0.17.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.17.1"
+        },
+        {
+          "cargo_checksum": "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "heck",
+          "source": {
+            "archive_sha256": "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea",
+            "archive_url": "https://crates.io/api/v1/crates/heck/0.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.0"
+        },
+        {
+          "cargo_checksum": "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "indexmap",
+          "source": {
+            "archive_sha256": "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9",
+            "archive_url": "https://crates.io/api/v1/crates/indexmap/2.14.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.14.0"
+        },
+        {
+          "cargo_checksum": "06d3a048d09fbb6597dbf7c69f40d14df4a49487db1487191618c893fc3b1c26",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "io-kit-sys",
+          "source": {
+            "archive_sha256": "06d3a048d09fbb6597dbf7c69f40d14df4a49487db1487191618c893fc3b1c26",
+            "archive_url": "https://crates.io/api/v1/crates/io-kit-sys/0.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.0"
+        },
+        {
+          "cargo_checksum": "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "is_terminal_polyfill",
+          "source": {
+            "archive_sha256": "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695",
+            "archive_url": "https://crates.io/api/v1/crates/is_terminal_polyfill/1.70.2/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.70.2"
+        },
+        {
+          "cargo_checksum": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "itoa",
+          "source": {
+            "archive_sha256": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682",
+            "archive_url": "https://crates.io/api/v1/crates/itoa/1.0.18/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.18"
+        },
+        {
+          "cargo_checksum": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "libc",
+          "source": {
+            "archive_sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+            "archive_url": "https://crates.io/api/v1/crates/libc/0.2.189/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.189"
+        },
+        {
+          "cargo_checksum": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "log",
+          "source": {
+            "archive_sha256": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+            "archive_url": "https://crates.io/api/v1/crates/log/0.4.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.33"
+        },
+        {
+          "cargo_checksum": "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "mach2",
+          "source": {
+            "archive_sha256": "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea",
+            "archive_url": "https://crates.io/api/v1/crates/mach2/0.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.0"
+        },
+        {
+          "cargo_checksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "memchr",
+          "source": {
+            "archive_sha256": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+            "archive_url": "https://crates.io/api/v1/crates/memchr/2.8.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.8.3"
+        },
+        {
+          "cargo_checksum": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-complex",
+          "source": {
+            "archive_sha256": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+            "archive_url": "https://crates.io/api/v1/crates/num-complex/0.4.6/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.6"
+        },
+        {
+          "cargo_checksum": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-integer",
+          "source": {
+            "archive_sha256": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+            "archive_url": "https://crates.io/api/v1/crates/num-integer/0.1.46/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.46"
+        },
+        {
+          "cargo_checksum": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-traits",
+          "source": {
+            "archive_sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+            "archive_url": "https://crates.io/api/v1/crates/num-traits/0.2.19/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.19"
+        },
+        {
+          "cargo_checksum": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "nusb",
+          "source": {
+            "archive_sha256": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+            "archive_url": "https://crates.io/api/v1/crates/nusb/0.2.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.7"
+        },
+        {
+          "cargo_checksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "once_cell",
+          "source": {
+            "archive_sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+            "archive_url": "https://crates.io/api/v1/crates/once_cell/1.21.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.21.4"
+        },
+        {
+          "cargo_checksum": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "pin-project-lite",
+          "source": {
+            "archive_sha256": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+            "archive_url": "https://crates.io/api/v1/crates/pin-project-lite/0.2.17/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.17"
+        },
+        {
+          "cargo_checksum": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "primal-check",
+          "source": {
+            "archive_sha256": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+            "archive_url": "https://crates.io/api/v1/crates/primal-check/0.3.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.4"
+        },
+        {
+          "cargo_checksum": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "proc-macro2",
+          "source": {
+            "archive_sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+            "archive_url": "https://crates.io/api/v1/crates/proc-macro2/1.0.107/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.107"
+        },
+        {
+          "cargo_checksum": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "quote",
+          "source": {
+            "archive_sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+            "archive_url": "https://crates.io/api/v1/crates/quote/1.0.47/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.47"
+        },
+        {
+          "cargo_checksum": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustfft",
+          "source": {
+            "archive_sha256": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+            "archive_url": "https://crates.io/api/v1/crates/rustfft/6.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "6.4.1"
+        },
+        {
+          "cargo_checksum": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustix",
+          "source": {
+            "archive_sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+            "archive_url": "https://crates.io/api/v1/crates/rustix/1.1.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.4"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-airspy",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-airspy",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-cabi",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-cabi",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-core",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-core",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-rtlsdr",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-rtlsdr",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-simd",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-simd",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-transport",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-transport",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "serde",
+          "source": {
+            "archive_sha256": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+            "archive_url": "https://crates.io/api/v1/crates/serde/1.0.229/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.229"
+        },
+        {
+          "cargo_checksum": "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "serde_core",
+          "source": {
+            "archive_sha256": "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48",
+            "archive_url": "https://crates.io/api/v1/crates/serde_core/1.0.229/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.229"
+        },
+        {
+          "cargo_checksum": "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "serde_derive",
+          "source": {
+            "archive_sha256": "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348",
+            "archive_url": "https://crates.io/api/v1/crates/serde_derive/1.0.229/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.229"
+        },
+        {
+          "cargo_checksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "serde_json",
+          "source": {
+            "archive_sha256": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
+            "archive_url": "https://crates.io/api/v1/crates/serde_json/1.0.151/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.151"
+        },
+        {
+          "cargo_checksum": "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "serde_spanned",
+          "source": {
+            "archive_sha256": "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26",
+            "archive_url": "https://crates.io/api/v1/crates/serde_spanned/1.1.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.1"
+        },
+        {
+          "cargo_checksum": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "slab",
+          "source": {
+            "archive_sha256": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+            "archive_url": "https://crates.io/api/v1/crates/slab/0.4.12/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.12"
+        },
+        {
+          "cargo_checksum": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "strength_reduce",
+          "source": {
+            "archive_sha256": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+            "archive_url": "https://crates.io/api/v1/crates/strength_reduce/0.2.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.4"
+        },
+        {
+          "cargo_checksum": "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "strsim",
+          "source": {
+            "archive_sha256": "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f",
+            "archive_url": "https://crates.io/api/v1/crates/strsim/0.11.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.11.1"
+        },
+        {
+          "cargo_checksum": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+            "archive_url": "https://crates.io/api/v1/crates/syn/2.0.119/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.119"
+        },
+        {
+          "cargo_checksum": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+            "archive_url": "https://crates.io/api/v1/crates/syn/3.0.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "3.0.3"
+        },
+        {
+          "cargo_checksum": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tempfile",
+          "source": {
+            "archive_sha256": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+            "archive_url": "https://crates.io/api/v1/crates/tempfile/3.27.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "3.27.0"
+        },
+        {
+          "cargo_checksum": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror",
+          "source": {
+            "archive_sha256": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror-impl",
+          "source": {
+            "archive_sha256": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "toml",
+          "source": {
+            "archive_sha256": "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863",
+            "archive_url": "https://crates.io/api/v1/crates/toml/0.9.12+spec-1.1.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.9.12+spec-1.1.0"
+        },
+        {
+          "cargo_checksum": "92e1cfed4a3038bc5a127e35a2d360f145e1f4b971b551a2ba5fd7aedf7e1347",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "toml_datetime",
+          "source": {
+            "archive_sha256": "92e1cfed4a3038bc5a127e35a2d360f145e1f4b971b551a2ba5fd7aedf7e1347",
+            "archive_url": "https://crates.io/api/v1/crates/toml_datetime/0.7.5+spec-1.1.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.7.5+spec-1.1.0"
+        },
+        {
+          "cargo_checksum": "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "toml_parser",
+          "source": {
+            "archive_sha256": "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56",
+            "archive_url": "https://crates.io/api/v1/crates/toml_parser/1.1.3+spec-1.1.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.3+spec-1.1.0"
+        },
+        {
+          "cargo_checksum": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing",
+          "source": {
+            "archive_sha256": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+            "archive_url": "https://crates.io/api/v1/crates/tracing/0.1.44/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.44"
+        },
+        {
+          "cargo_checksum": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-attributes",
+          "source": {
+            "archive_sha256": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-attributes/0.1.31/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.31"
+        },
+        {
+          "cargo_checksum": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-core",
+          "source": {
+            "archive_sha256": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-core/0.1.36/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.36"
+        },
+        {
+          "cargo_checksum": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "transpose",
+          "source": {
+            "archive_sha256": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+            "archive_url": "https://crates.io/api/v1/crates/transpose/0.2.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.3"
+        },
+        {
+          "cargo_checksum": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "unicode-ident",
+          "source": {
+            "archive_sha256": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+            "archive_url": "https://crates.io/api/v1/crates/unicode-ident/1.0.24/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.24"
+        },
+        {
+          "cargo_checksum": "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "utf8parse",
+          "source": {
+            "archive_sha256": "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821",
+            "archive_url": "https://crates.io/api/v1/crates/utf8parse/0.2.2/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.2"
+        },
+        {
+          "cargo_checksum": "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "winnow",
+          "source": {
+            "archive_sha256": "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945",
+            "archive_url": "https://crates.io/api/v1/crates/winnow/0.7.15/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.7.15"
+        },
+        {
+          "cargo_checksum": "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "winnow",
+          "source": {
+            "archive_sha256": "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81",
+            "archive_url": "https://crates.io/api/v1/crates/winnow/1.0.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.4"
+        },
+        {
+          "cargo_checksum": "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "zmij",
+          "source": {
+            "archive_sha256": "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b",
+            "archive_url": "https://crates.io/api/v1/crates/zmij/1.0.23/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.23"
+        }
+      ],
+      "root_package": "sdr-fox-cabi",
+      "target": "aarch64-apple-darwin"
+    },
+    {
+      "edges": [
+        "normal",
+        "build"
+      ],
+      "features": [
+        "android"
+      ],
+      "package_count": 54,
+      "packages": [
+        {
+          "cargo_checksum": "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "android_log-sys",
+          "source": {
+            "archive_sha256": "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d",
+            "archive_url": "https://crates.io/api/v1/crates/android_log-sys/0.3.2/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.2"
+        },
+        {
+          "cargo_checksum": "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "android_logger",
+          "source": {
+            "archive_sha256": "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3",
+            "archive_url": "https://crates.io/api/v1/crates/android_logger/0.15.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.15.1"
+        },
+        {
+          "cargo_checksum": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "autocfg",
+          "source": {
+            "archive_sha256": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+            "archive_url": "https://crates.io/api/v1/crates/autocfg/1.5.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.5.1"
+        },
+        {
+          "cargo_checksum": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "bitflags",
+          "source": {
+            "archive_sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+            "archive_url": "https://crates.io/api/v1/crates/bitflags/2.13.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.13.1"
+        },
+        {
+          "cargo_checksum": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "bytes",
+          "source": {
+            "archive_sha256": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+            "archive_url": "https://crates.io/api/v1/crates/bytes/1.12.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.12.1"
+        },
+        {
+          "cargo_checksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "cfg-if",
+          "source": {
+            "archive_sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+            "archive_url": "https://crates.io/api/v1/crates/cfg-if/1.0.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.4"
+        },
+        {
+          "cargo_checksum": "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "combine",
+          "source": {
+            "archive_sha256": "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd",
+            "archive_url": "https://crates.io/api/v1/crates/combine/4.6.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "4.6.7"
+        },
+        {
+          "cargo_checksum": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-channel",
+          "source": {
+            "archive_sha256": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-channel/0.5.16/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.16"
+        },
+        {
+          "cargo_checksum": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-utils",
+          "source": {
+            "archive_sha256": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.8.22"
+        },
+        {
+          "cargo_checksum": "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "env_filter",
+          "source": {
+            "archive_sha256": "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2",
+            "archive_url": "https://crates.io/api/v1/crates/env_filter/0.1.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.4"
+        },
+        {
+          "cargo_checksum": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "errno",
+          "source": {
+            "archive_sha256": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+            "archive_url": "https://crates.io/api/v1/crates/errno/0.3.14/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.14"
+        },
+        {
+          "cargo_checksum": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "futures-core",
+          "source": {
+            "archive_sha256": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+            "archive_url": "https://crates.io/api/v1/crates/futures-core/0.3.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.33"
+        },
+        {
+          "cargo_checksum": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni",
+          "source": {
+            "archive_sha256": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
+            "archive_url": "https://crates.io/api/v1/crates/jni/0.22.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.22.4"
+        },
+        {
+          "cargo_checksum": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-macros",
+          "source": {
+            "archive_sha256": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
+            "archive_url": "https://crates.io/api/v1/crates/jni-macros/0.22.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.22.4"
+        },
+        {
+          "cargo_checksum": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-sys",
+          "source": {
+            "archive_sha256": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
+            "archive_url": "https://crates.io/api/v1/crates/jni-sys/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-sys-macros",
+          "source": {
+            "archive_sha256": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+            "archive_url": "https://crates.io/api/v1/crates/jni-sys-macros/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "libc",
+          "source": {
+            "archive_sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+            "archive_url": "https://crates.io/api/v1/crates/libc/0.2.189/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.189"
+        },
+        {
+          "cargo_checksum": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "linux-raw-sys",
+          "source": {
+            "archive_sha256": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+            "archive_url": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.12.1"
+        },
+        {
+          "cargo_checksum": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "log",
+          "source": {
+            "archive_sha256": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+            "archive_url": "https://crates.io/api/v1/crates/log/0.4.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.33"
+        },
+        {
+          "cargo_checksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "memchr",
+          "source": {
+            "archive_sha256": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+            "archive_url": "https://crates.io/api/v1/crates/memchr/2.8.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.8.3"
+        },
+        {
+          "cargo_checksum": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-complex",
+          "source": {
+            "archive_sha256": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+            "archive_url": "https://crates.io/api/v1/crates/num-complex/0.4.6/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.6"
+        },
+        {
+          "cargo_checksum": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-integer",
+          "source": {
+            "archive_sha256": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+            "archive_url": "https://crates.io/api/v1/crates/num-integer/0.1.46/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.46"
+        },
+        {
+          "cargo_checksum": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-traits",
+          "source": {
+            "archive_sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+            "archive_url": "https://crates.io/api/v1/crates/num-traits/0.2.19/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.19"
+        },
+        {
+          "cargo_checksum": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "nusb",
+          "source": {
+            "archive_sha256": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+            "archive_url": "https://crates.io/api/v1/crates/nusb/0.2.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.7"
+        },
+        {
+          "cargo_checksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "once_cell",
+          "source": {
+            "archive_sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+            "archive_url": "https://crates.io/api/v1/crates/once_cell/1.21.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.21.4"
+        },
+        {
+          "cargo_checksum": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "pin-project-lite",
+          "source": {
+            "archive_sha256": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+            "archive_url": "https://crates.io/api/v1/crates/pin-project-lite/0.2.17/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.17"
+        },
+        {
+          "cargo_checksum": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "primal-check",
+          "source": {
+            "archive_sha256": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+            "archive_url": "https://crates.io/api/v1/crates/primal-check/0.3.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.4"
+        },
+        {
+          "cargo_checksum": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "proc-macro2",
+          "source": {
+            "archive_sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+            "archive_url": "https://crates.io/api/v1/crates/proc-macro2/1.0.107/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.107"
+        },
+        {
+          "cargo_checksum": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "quote",
+          "source": {
+            "archive_sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+            "archive_url": "https://crates.io/api/v1/crates/quote/1.0.47/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.47"
+        },
+        {
+          "cargo_checksum": "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustc_version",
+          "source": {
+            "archive_sha256": "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92",
+            "archive_url": "https://crates.io/api/v1/crates/rustc_version/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustfft",
+          "source": {
+            "archive_sha256": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+            "archive_url": "https://crates.io/api/v1/crates/rustfft/6.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "6.4.1"
+        },
+        {
+          "cargo_checksum": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustix",
+          "source": {
+            "archive_sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+            "archive_url": "https://crates.io/api/v1/crates/rustix/1.1.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.4"
+        },
+        {
+          "cargo_checksum": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "same-file",
+          "source": {
+            "archive_sha256": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+            "archive_url": "https://crates.io/api/v1/crates/same-file/1.0.6/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.6"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-airspy",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-airspy",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-core",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-core",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-jni",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-jni",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-rtlsdr",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-rtlsdr",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-simd",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-simd",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-transport",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-transport",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "semver",
+          "source": {
+            "archive_sha256": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+            "archive_url": "https://crates.io/api/v1/crates/semver/1.0.28/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.28"
+        },
+        {
+          "cargo_checksum": "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "simd_cesu8",
+          "source": {
+            "archive_sha256": "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520",
+            "archive_url": "https://crates.io/api/v1/crates/simd_cesu8/1.2.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.2.0"
+        },
+        {
+          "cargo_checksum": "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "simdutf8",
+          "source": {
+            "archive_sha256": "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e",
+            "archive_url": "https://crates.io/api/v1/crates/simdutf8/0.1.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.5"
+        },
+        {
+          "cargo_checksum": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "slab",
+          "source": {
+            "archive_sha256": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+            "archive_url": "https://crates.io/api/v1/crates/slab/0.4.12/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.12"
+        },
+        {
+          "cargo_checksum": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "strength_reduce",
+          "source": {
+            "archive_sha256": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+            "archive_url": "https://crates.io/api/v1/crates/strength_reduce/0.2.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.4"
+        },
+        {
+          "cargo_checksum": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+            "archive_url": "https://crates.io/api/v1/crates/syn/2.0.119/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.119"
+        },
+        {
+          "cargo_checksum": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+            "archive_url": "https://crates.io/api/v1/crates/syn/3.0.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "3.0.3"
+        },
+        {
+          "cargo_checksum": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror",
+          "source": {
+            "archive_sha256": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror-impl",
+          "source": {
+            "archive_sha256": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing",
+          "source": {
+            "archive_sha256": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+            "archive_url": "https://crates.io/api/v1/crates/tracing/0.1.44/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.44"
+        },
+        {
+          "cargo_checksum": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-attributes",
+          "source": {
+            "archive_sha256": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-attributes/0.1.31/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.31"
+        },
+        {
+          "cargo_checksum": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-core",
+          "source": {
+            "archive_sha256": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-core/0.1.36/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.36"
+        },
+        {
+          "cargo_checksum": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "transpose",
+          "source": {
+            "archive_sha256": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+            "archive_url": "https://crates.io/api/v1/crates/transpose/0.2.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.3"
+        },
+        {
+          "cargo_checksum": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "unicode-ident",
+          "source": {
+            "archive_sha256": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+            "archive_url": "https://crates.io/api/v1/crates/unicode-ident/1.0.24/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.24"
+        },
+        {
+          "cargo_checksum": "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "walkdir",
+          "source": {
+            "archive_sha256": "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b",
+            "archive_url": "https://crates.io/api/v1/crates/walkdir/2.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.5.0"
+        }
+      ],
+      "root_package": "sdr-fox-jni",
+      "target": "aarch64-linux-android"
+    },
+    {
+      "edges": [
+        "normal",
+        "build"
+      ],
+      "features": [
+        "android"
+      ],
+      "package_count": 54,
+      "packages": [
+        {
+          "cargo_checksum": "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "android_log-sys",
+          "source": {
+            "archive_sha256": "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d",
+            "archive_url": "https://crates.io/api/v1/crates/android_log-sys/0.3.2/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.2"
+        },
+        {
+          "cargo_checksum": "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "android_logger",
+          "source": {
+            "archive_sha256": "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3",
+            "archive_url": "https://crates.io/api/v1/crates/android_logger/0.15.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.15.1"
+        },
+        {
+          "cargo_checksum": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "autocfg",
+          "source": {
+            "archive_sha256": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+            "archive_url": "https://crates.io/api/v1/crates/autocfg/1.5.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.5.1"
+        },
+        {
+          "cargo_checksum": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "bitflags",
+          "source": {
+            "archive_sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+            "archive_url": "https://crates.io/api/v1/crates/bitflags/2.13.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.13.1"
+        },
+        {
+          "cargo_checksum": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "bytes",
+          "source": {
+            "archive_sha256": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+            "archive_url": "https://crates.io/api/v1/crates/bytes/1.12.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.12.1"
+        },
+        {
+          "cargo_checksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "cfg-if",
+          "source": {
+            "archive_sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+            "archive_url": "https://crates.io/api/v1/crates/cfg-if/1.0.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.4"
+        },
+        {
+          "cargo_checksum": "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "combine",
+          "source": {
+            "archive_sha256": "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd",
+            "archive_url": "https://crates.io/api/v1/crates/combine/4.6.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "4.6.7"
+        },
+        {
+          "cargo_checksum": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-channel",
+          "source": {
+            "archive_sha256": "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-channel/0.5.16/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.5.16"
+        },
+        {
+          "cargo_checksum": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "crossbeam-utils",
+          "source": {
+            "archive_sha256": "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17",
+            "archive_url": "https://crates.io/api/v1/crates/crossbeam-utils/0.8.22/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.8.22"
+        },
+        {
+          "cargo_checksum": "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "env_filter",
+          "source": {
+            "archive_sha256": "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2",
+            "archive_url": "https://crates.io/api/v1/crates/env_filter/0.1.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.4"
+        },
+        {
+          "cargo_checksum": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "errno",
+          "source": {
+            "archive_sha256": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+            "archive_url": "https://crates.io/api/v1/crates/errno/0.3.14/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.14"
+        },
+        {
+          "cargo_checksum": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "futures-core",
+          "source": {
+            "archive_sha256": "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7",
+            "archive_url": "https://crates.io/api/v1/crates/futures-core/0.3.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.33"
+        },
+        {
+          "cargo_checksum": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni",
+          "source": {
+            "archive_sha256": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
+            "archive_url": "https://crates.io/api/v1/crates/jni/0.22.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.22.4"
+        },
+        {
+          "cargo_checksum": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-macros",
+          "source": {
+            "archive_sha256": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
+            "archive_url": "https://crates.io/api/v1/crates/jni-macros/0.22.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.22.4"
+        },
+        {
+          "cargo_checksum": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-sys",
+          "source": {
+            "archive_sha256": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
+            "archive_url": "https://crates.io/api/v1/crates/jni-sys/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "jni-sys-macros",
+          "source": {
+            "archive_sha256": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+            "archive_url": "https://crates.io/api/v1/crates/jni-sys-macros/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "libc",
+          "source": {
+            "archive_sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+            "archive_url": "https://crates.io/api/v1/crates/libc/0.2.189/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.189"
+        },
+        {
+          "cargo_checksum": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "linux-raw-sys",
+          "source": {
+            "archive_sha256": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+            "archive_url": "https://crates.io/api/v1/crates/linux-raw-sys/0.12.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.12.1"
+        },
+        {
+          "cargo_checksum": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "log",
+          "source": {
+            "archive_sha256": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad",
+            "archive_url": "https://crates.io/api/v1/crates/log/0.4.33/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.33"
+        },
+        {
+          "cargo_checksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "memchr",
+          "source": {
+            "archive_sha256": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+            "archive_url": "https://crates.io/api/v1/crates/memchr/2.8.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.8.3"
+        },
+        {
+          "cargo_checksum": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-complex",
+          "source": {
+            "archive_sha256": "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495",
+            "archive_url": "https://crates.io/api/v1/crates/num-complex/0.4.6/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.6"
+        },
+        {
+          "cargo_checksum": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-integer",
+          "source": {
+            "archive_sha256": "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f",
+            "archive_url": "https://crates.io/api/v1/crates/num-integer/0.1.46/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.46"
+        },
+        {
+          "cargo_checksum": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "num-traits",
+          "source": {
+            "archive_sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+            "archive_url": "https://crates.io/api/v1/crates/num-traits/0.2.19/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.19"
+        },
+        {
+          "cargo_checksum": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "nusb",
+          "source": {
+            "archive_sha256": "18ef13beb3b3a8fc16fd7aea912ebd3d45dde00a9a5b968d0742297468065845",
+            "archive_url": "https://crates.io/api/v1/crates/nusb/0.2.7/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.7"
+        },
+        {
+          "cargo_checksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "once_cell",
+          "source": {
+            "archive_sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+            "archive_url": "https://crates.io/api/v1/crates/once_cell/1.21.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.21.4"
+        },
+        {
+          "cargo_checksum": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "pin-project-lite",
+          "source": {
+            "archive_sha256": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+            "archive_url": "https://crates.io/api/v1/crates/pin-project-lite/0.2.17/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.17"
+        },
+        {
+          "cargo_checksum": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "primal-check",
+          "source": {
+            "archive_sha256": "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08",
+            "archive_url": "https://crates.io/api/v1/crates/primal-check/0.3.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.3.4"
+        },
+        {
+          "cargo_checksum": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "proc-macro2",
+          "source": {
+            "archive_sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+            "archive_url": "https://crates.io/api/v1/crates/proc-macro2/1.0.107/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.107"
+        },
+        {
+          "cargo_checksum": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "quote",
+          "source": {
+            "archive_sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+            "archive_url": "https://crates.io/api/v1/crates/quote/1.0.47/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.47"
+        },
+        {
+          "cargo_checksum": "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustc_version",
+          "source": {
+            "archive_sha256": "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92",
+            "archive_url": "https://crates.io/api/v1/crates/rustc_version/0.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.1"
+        },
+        {
+          "cargo_checksum": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustfft",
+          "source": {
+            "archive_sha256": "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89",
+            "archive_url": "https://crates.io/api/v1/crates/rustfft/6.4.1/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "6.4.1"
+        },
+        {
+          "cargo_checksum": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "rustix",
+          "source": {
+            "archive_sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+            "archive_url": "https://crates.io/api/v1/crates/rustix/1.1.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.1.4"
+        },
+        {
+          "cargo_checksum": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "same-file",
+          "source": {
+            "archive_sha256": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+            "archive_url": "https://crates.io/api/v1/crates/same-file/1.0.6/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.6"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-airspy",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-airspy",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-core",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-core",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-jni",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-jni",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-rtlsdr",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-rtlsdr",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-simd",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-simd",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": null,
+          "cargo_source": null,
+          "name": "sdr-fox-transport",
+          "source": {
+            "kind": "workspace",
+            "path": "crates/sdr-fox-transport",
+            "repository": "https://github.com/SondeFox/sdr-fox.git",
+            "revision": "fb34d8c600725b54c5a950234c892a593c343968",
+            "tree": "fb5fcf5ce09c8c31bb4004b5861d4533c37b581d"
+          },
+          "version": "0.1.0"
+        },
+        {
+          "cargo_checksum": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "semver",
+          "source": {
+            "archive_sha256": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+            "archive_url": "https://crates.io/api/v1/crates/semver/1.0.28/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.28"
+        },
+        {
+          "cargo_checksum": "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "simd_cesu8",
+          "source": {
+            "archive_sha256": "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520",
+            "archive_url": "https://crates.io/api/v1/crates/simd_cesu8/1.2.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.2.0"
+        },
+        {
+          "cargo_checksum": "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "simdutf8",
+          "source": {
+            "archive_sha256": "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e",
+            "archive_url": "https://crates.io/api/v1/crates/simdutf8/0.1.5/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.5"
+        },
+        {
+          "cargo_checksum": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "slab",
+          "source": {
+            "archive_sha256": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+            "archive_url": "https://crates.io/api/v1/crates/slab/0.4.12/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.4.12"
+        },
+        {
+          "cargo_checksum": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "strength_reduce",
+          "source": {
+            "archive_sha256": "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82",
+            "archive_url": "https://crates.io/api/v1/crates/strength_reduce/0.2.4/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.4"
+        },
+        {
+          "cargo_checksum": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+            "archive_url": "https://crates.io/api/v1/crates/syn/2.0.119/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.119"
+        },
+        {
+          "cargo_checksum": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "syn",
+          "source": {
+            "archive_sha256": "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3",
+            "archive_url": "https://crates.io/api/v1/crates/syn/3.0.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "3.0.3"
+        },
+        {
+          "cargo_checksum": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror",
+          "source": {
+            "archive_sha256": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "thiserror-impl",
+          "source": {
+            "archive_sha256": "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af",
+            "archive_url": "https://crates.io/api/v1/crates/thiserror-impl/2.0.20/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.0.20"
+        },
+        {
+          "cargo_checksum": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing",
+          "source": {
+            "archive_sha256": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100",
+            "archive_url": "https://crates.io/api/v1/crates/tracing/0.1.44/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.44"
+        },
+        {
+          "cargo_checksum": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-attributes",
+          "source": {
+            "archive_sha256": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-attributes/0.1.31/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.31"
+        },
+        {
+          "cargo_checksum": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "tracing-core",
+          "source": {
+            "archive_sha256": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a",
+            "archive_url": "https://crates.io/api/v1/crates/tracing-core/0.1.36/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.1.36"
+        },
+        {
+          "cargo_checksum": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "transpose",
+          "source": {
+            "archive_sha256": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+            "archive_url": "https://crates.io/api/v1/crates/transpose/0.2.3/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "0.2.3"
+        },
+        {
+          "cargo_checksum": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "unicode-ident",
+          "source": {
+            "archive_sha256": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+            "archive_url": "https://crates.io/api/v1/crates/unicode-ident/1.0.24/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "1.0.24"
+        },
+        {
+          "cargo_checksum": "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b",
+          "cargo_source": "registry+https://github.com/rust-lang/crates.io-index",
+          "name": "walkdir",
+          "source": {
+            "archive_sha256": "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b",
+            "archive_url": "https://crates.io/api/v1/crates/walkdir/2.5.0/download",
+            "index": "registry+https://github.com/rust-lang/crates.io-index",
+            "kind": "registry"
+          },
+          "version": "2.5.0"
+        }
+      ],
+      "root_package": "sdr-fox-jni",
+      "target": "x86_64-linux-android"
+    }
+  ],
+  "purpose": "Reconstruct the reviewed Android 16 KB candidate atomic set; local reference bytes are not cold-host or release acceptance.",
+  "reconstruction_profile": "android16kb-2d257275",
+  "reference_build": {
+    "consumer_update_pending": true,
+    "fresh_build_proven": false,
+    "inspection_sha256": "d22cc69748567a58732597b7251c74bda281a43cd2e7610ae529fbb19332cc84",
+    "kind": "inspected-local-reference",
+    "source_commit": "2d25727523646c166771f066634b16f60ce22977"
+  },
+  "schema": 1,
+  "source": {
+    "cargo_lock_sha256": "62ab5b79776c322f9776c8c41f8a6707fac6dfcf6a49b791fcb30e10999b4f76",
+    "commit": "2d25727523646c166771f066634b16f60ce22977",
+    "repository": "https://github.com/SondeFox/sdr-fox.git",
+    "tree": "021353fabc37dca936cede81b4ce54808c4e5c83",
+    "verified_fresh_history_root": "7bcb45cd2a993240abe7f41dcaeec4a84bc04aeb",
+    "workflow_base_branch": "master",
+    "workflow_base_commit": "8a2e780ee1c51bde1d11bda66b4f7f298ec75c0b"
+  },
+  "toolchain": {
+    "android_ndk_api": 21,
+    "android_ndk_revision": "27.2.12479018",
+    "cargo_build_flags": [
+      "--locked",
+      "--offline",
+      "--release"
+    ],
+    "cargo_home_policy": "CARGO_HOME unset; resolve to default actual HOME/.cargo; no reused production registry/git/target caches",
+    "cargo_ndk_crate_sha256": "903cc87cda6ab7a2ff82a74065e1c2ae5baa869546b32eb4aacabcc6ed5a670f",
+    "cargo_ndk_version": "cargo-ndk 4.1.2",
+    "cargo_version": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+    "expected_default_cargo_embedded_prefix": "/home/builder/.cargo",
+    "host_architecture": "arm64",
+    "host_os": "macOS",
+    "macos_deployment_target": "14.0",
+    "ndk_files": [
+      {
+        "path": "source.properties",
+        "sha256": "70f1c5165e6d997b18782a49cff71da7a3caacd0c4cd811da24c43359fb83cf6"
+      },
+      {
+        "path": "toolchains/llvm/prebuilt/darwin-x86_64/bin/clang",
+        "sha256": "1aac7c103794087632c35c35b83c6d6c8fff4cd01737e5dfbd1b4297942189e2"
+      },
+      {
+        "path": "toolchains/llvm/prebuilt/darwin-x86_64/bin/ld.lld",
+        "sha256": "06d8ec9a0183bfb70d8c316c6889d21cf8ddb96ffa6e0e2d04716f7217ce106d"
+      },
+      {
+        "path": "toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-nm",
+        "sha256": "ecfd83fc44e66251a406d8710dacec47ee3eb9ee4cf188990691213f0d9c1499"
+      },
+      {
+        "path": "toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf",
+        "sha256": "0633d089c7be066edd13aa39148d2429dee1ca3e349a71c4d1f8952fce27c38e"
+      }
+    ],
+    "remaps_in_order": [
+      {
+        "actual": "source_root_physical",
+        "virtual": "/workspace/sdr-fox"
+      },
+      {
+        "actual": "cargo_home_physical",
+        "virtual": "/cargo"
+      },
+      {
+        "actual": "builder_home",
+        "virtual": "/home/builder"
+      }
+    ],
+    "rust_toolchain": "1.95.0-aarch64-apple-darwin",
+    "rustc_version": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "rustflags_template": "--remap-path-prefix=${SDR_FOX_SOURCE_ROOT}=/workspace/sdr-fox --remap-path-prefix=${CARGO_CACHE_ROOT}=/cargo --remap-path-prefix=${HOME}=/home/builder",
+    "xcode_identity": "Xcode 27.0\nBuild version 27A266a"
+  },
+  "validation_policy": {
+    "actual_host_path_scan_required": true,
+    "all_five_artifacts_required": true,
+    "android_16kb_layout_required": true,
+    "exact_bytes_required": true,
+    "exact_package_sets_required": true,
+    "forbidden_packages": [
+      "rusb",
+      "libusb1-sys"
+    ],
+    "header_must_be_regenerated": true,
+    "no_expected_hash_rewriting_after_failure": true,
+    "private_evidence_only_until_clearance": true,
+    "production_outputs_must_not_be_replaced": true,
+    "semantic_match_is_not_byte_reproduction": true
+  }
+}
